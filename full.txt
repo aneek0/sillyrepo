@@ -47,4 +47,4 @@ time_converter
 url
 valutator
 voicy
-yandere
+yanderes
