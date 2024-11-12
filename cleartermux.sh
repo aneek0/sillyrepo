@@ -7,7 +7,7 @@ printf "\n\n\033[1;35mHikka is being installed... ✨\033[0m"
 
 echo -e "\n\n\033[0;96mInstalling base packages...\033[0m"
 
-eval "pkg i git libjpeg-turbo openssl ncurses-utils tur-repo -y"
+eval "pkg i git libjpeg-turbo openssl ncurses-utils ffmpeg neofetch tur-repo -y"
 
 echo -e "\033[0;96mInstalling Python 3.10.15...\033[0m"
 eval "pkg i python3.10 -y && update-alternatives --install /data/data/com.termux/files/usr/bin/python3 python3 /data/data/com.termux/files/usr/bin/python3.10 1"
