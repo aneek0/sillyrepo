@@ -7,10 +7,10 @@ printf "\n\n\033[1;35mHikka is being installed... ✨\033[0m"
 
 echo -e "\n\n\033[0;96mInstalling base packages...\033[0m"
 
-eval "pkg i git libjpeg-turbo openssl wget ncurses-utils tur-repo -y"
+eval "pkg i git libjpeg-turbo openssl ncurses-utils tur-repo -y"
 
 echo -e "\033[0;96mInstalling Python 3.10.15...\033[0m"
-eval "pkg i python3.10 && update-alternatives --install /data/data/com.termux/files/usr/bin/python3 python3 /data/data/com.termux/files/usr/bin/python3.10 1"
+eval "pkg i python3.10 -y && update-alternatives --install /data/data/com.termux/files/usr/bin/python3 python3 /data/data/com.termux/files/usr/bin/python3.10 1"
 
 printf "\r\033[K\033[0;32mPackages ready!\e[0m\n"
 echo -e "\033[0;96mInstalling Pillow...\033[0m"
@@ -21,7 +21,7 @@ else
     eval 'export LDFLAGS="-L/system/lib/"'
 fi
 
-eval 'export CFLAGS="-I/data/data/com.termux/files/usr/include/" && pip install Pillow -U --no-cache-dir'
+eval 'export CFLAGS="-I/data/data/com.termux/files/usr/include/" && pip3 install Pillow -U --no-cache-dir'
 
 printf "\r\033[K\033[0;32mPillow installed!\e[0m\n"
 echo -e "\033[0;96mDownloading source code...\033[0m"
@@ -32,7 +32,7 @@ eval "cd && git clone https://github.com/hikariatama/Hikka && cd Hikka"
 echo -e "\033[0;96mSource code downloaded!...\033[0m\n"
 printf "\r\033[0;34mInstalling requirements...\e[0m"
 
-eval "pip install -r requirements.txt --no-cache-dir --no-warn-script-location --disable-pip-version-check --upgrade"
+eval "pip3 install -r requirements.txt --no-cache-dir --no-warn-script-location --disable-pip-version-check --upgrade"
 
 printf "\r\033[K\033[0;32mRequirements installed!\e[0m\n"
 
