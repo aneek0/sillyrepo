@@ -8,7 +8,7 @@ class Fragment(loader.Module):
     strings = {"name": "Check Fragment"}
     
     @loader.command()
-    async def ucheck(self, message):
+    async def fcheck(self, message):
         """Сколько стоит юзер на Fragment.com"""
         args = utils.get_args_raw(message)
         response = requests.get(f"https://fragment.com/username/{args}")
