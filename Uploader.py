@@ -3,9 +3,7 @@ import random
 import imghdr
 import requests
 from telethon.tl.types import Message
-
 from .. import loader, utils
-
 
 @loader.tds
 class FileUploaderMod(loader.Module):
@@ -29,7 +27,8 @@ class FileUploaderMod(loader.Module):
         "_cmd_doc_oxo": "Загрузить на 0x0.st",
         "_cmd_doc_x0": "Загрузить на x0.at",
         "_cmd_doc_kappa": "Загрузить на kappa.lol",
-        "_cmd_doc_catbox": "Загрузить на Catbox",
+        "_cmd_doc_catbox": "Загрузить на catbox.moe",
+        "_cmd_doc_envs": "Загрузить на envs.sh",  # Добавлено описание для нового метода
     }
 
     async def get_media(self, message: Message):
@@ -75,6 +74,7 @@ class FileUploaderMod(loader.Module):
 
         return file
 
+    # Загрузка на 0x0.st
     async def oxocmd(self, message: Message):
         """Загрузка на 0x0.st"""
         message = await utils.answer(message, self.strings("uploading"))
@@ -96,6 +96,7 @@ class FileUploaderMod(loader.Module):
         url = oxo.text
         await utils.answer(message, self.strings("uploaded").format(url))
 
+    # Загрузка на kappa.lol
     async def kappacmd(self, message: Message):
         """Загрузка на kappa.lol"""
         message = await utils.answer(message, self.strings("uploading"))
@@ -116,8 +117,9 @@ class FileUploaderMod(loader.Module):
         url = f"https://kappa.lol/{kappa.json()['id']}"
         await utils.answer(message, self.strings("uploaded").format(url))
 
+    # Загрузка на Catbox
     async def catboxcmd(self, message: Message):
-        """Загрузка на Catbox"""
+        """Загрузка на catbox.moe"""
         message = await utils.answer(message, self.strings("uploading"))
         file = await self.get_media(message)
         if not file:
@@ -136,3 +138,29 @@ class FileUploaderMod(loader.Module):
 
         url = catbox.text.strip()
         await utils.answer(message, self.strings("uploaded").format(url))
+
+    # Загрузка на envs.sh
+    async def envscmd(self, message: Message):
+        """Загрузка на envs.sh"""
+        message = await utils.answer(message, self.strings("uploading"))
+        file = await self.get_media(message)
+        if not file:
+            return
+
+        try:
+            response = await utils.run_sync(
+                requests.post,
+                "https://envs.sh",
+                files={"file": file},
+            )
+            # Если загрузка успешна, возвращаем URL файла
+            if response.status_code == 200:
+                url = response.text.strip()
+                await utils.answer(message, self.strings("uploaded").format(url))
+            else:
+                await utils.answer(message, self.strings("err"))
+        except ConnectionError:
+            await utils.answer(message, self.strings("err"))
+        except Exception as e:
+            await utils.answer(message, self.strings("err"))
+
