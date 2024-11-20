@@ -31,7 +31,7 @@ class Web2fileMod(loader.Module):
         if not website:
             if message.reply_to_msg_id:
                 replied_msg = await message.get_reply_message()
-                website = replied_msg.text if replied_msg else None
+                website = self.extract_url_from_text(replied_msg.text) if replied_msg else None
         
         if not website:
             await utils.answer(message, self.strings("no_args", message))
@@ -117,4 +117,12 @@ class Web2fileMod(loader.Module):
                 return f"{speed:.2f} {unit}"
             speed /= 1024
         return f"{speed:.2f} TB/s"
+
+    def extract_url_from_text(self, text: str) -> str:
+        """Извлекает URL из текста"""
+        url_pattern = r'(https?://[^\s]+)'
+        match = re.search(url_pattern, text)
+        if match:
+            return match.group(0)
+        return None
         
