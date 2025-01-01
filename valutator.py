@@ -1,3 +1,9 @@
+# ---------------------------------------------------------------------------------
+# Name: valutator
+# Description: Valute converter
+# Author: @Azu_nyyyyyyaaaaan
+# --------------------------------------------------------------------------------
+
 import asyncio
 from telethon import events
 from telethon.errors.rpcerrorlist import YouBlockedUserError
@@ -10,8 +16,7 @@ def register(cb):
 
 
 class ValuesMod(loader.Module):
-    """Конвертер валют от @Azu_nyyyyyyaaaaan
-    Работает с помощью бота @Deltatale_Currency_Converter_Bot
+    """Работает с помощью бота @Deltatale_Currency_Converter_Bot
     """
 
     strings = {"name": "Valutator"}
