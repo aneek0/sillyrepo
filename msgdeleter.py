@@ -88,19 +88,25 @@ class DeleteMessages(loader.Module):
             await message.edit("⚠️ Сообщения для удаления не найдены.")
 
     async def dpcmd(self, message):
-        """Удаляет сообщение, на которое ответили, и все сообщения после него."""
+        """Удаляет сообщение, на которое ответили, и все сообщения после него. Добавьте -m для удаления только ваших сообщений."""
+        args = utils.get_args_raw(message)
         reply = await message.get_reply_message()
+
         if not reply:
             await message.edit("⚠️ Ответьте на сообщение, чтобы использовать эту команду.")
             return
 
+        only_mine = "-m" in args
         messages_to_delete = []
+
         async for msg in self.client.iter_messages(message.chat_id):
             if msg.id >= reply.id:
+                if only_mine and msg.from_id != (await self.client.get_me()).id:
+                    continue
                 messages_to_delete.append(msg.id)
 
         if messages_to_delete:
             await self.client.delete_messages(message.chat_id, messages_to_delete)
-            await message.delete()  # Удаляем командное сообщение без редактирования
+            await message.delete()  # Удаляем командное сообщение
         else:
             await message.edit("⚠️ Сообщения для удаления не найдены.")
