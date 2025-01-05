@@ -1,3 +1,4 @@
+AI-support-Hikka
 Circles
 Daddyresponder
 Daresponder
@@ -12,11 +13,11 @@ LoveMagic
 MegaMozg
 Morze
 MyUsernames
-NekoSpy
 NekosLife
 Pinger
 Rename
 RndNsfw
+ScheduledMessages
 Spam
 Spoilers
 Stats
@@ -26,6 +27,7 @@ TempMail
 Triggers
 Uploader
 UserInfo
+UsernameTools
 Vivo
 Vizjener
 Voicy
@@ -45,9 +47,9 @@ hiddenurl
 hoholmod
 kamarik
 lolim
+membersquery
 msgdeleter
 mtfmod
-nekospyfix
 newunitheta
 onlysqapi
 scrs
