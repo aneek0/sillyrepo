@@ -26,7 +26,7 @@ class GitUploader(loader.Module):
         "token_error": "<i>Ошибка токена</i>",
         "exist_422": (
             "<b>Не удалось загрузить файл. Возможная причина: файл с таким названием"
-            " уже существует в репозитории.</b>"
+            " уже существует в репозитории. Файл будет перезаписан.</b>"
         ),
         "cfg_token": "Токен GitHub",
         "token_not_found": "Токен не найден",
@@ -120,8 +120,19 @@ class GitUploader(loader.Module):
                 "message": "Upload file",
                 "content": encoded_string
             })
+
+            # Проверка на существование файла и получение SHA для обновления
+            r_get = requests.get(url, headers=head)
+            if r_get.status_code == 200:
+                sha = r_get.json()["sha"]
+                git_data = json.dumps({
+                    "message": "Update file",
+                    "content": encoded_string,
+                    "sha": sha
+                })
+
             r = requests.put(url, headers=head, data=git_data)
-            if r.status_code == 201:
+            if r.status_code == 201 or r.status_code == 200:
                 uploaded_to = f"https://github.com/{USERNAME}/{REPO}/blob/main/{fname}"
                 uploaded_to_raw = r.json()["content"]["download_url"]
                 await utils.answer(
