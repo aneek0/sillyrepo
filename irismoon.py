@@ -1,6 +1,6 @@
 version = (2, 2, 8)
 
-# meta developer: @RUIS_VlP
+# meta developer: @stopxiaomi & @Azu_nyyyyyyaaaaan
 
 import random
 from datetime import datetime, timedelta
@@ -11,11 +11,11 @@ from .. import loader, utils
 
 
 @loader.tds
-class IrisAutoFarm(loader.Module):
+class Irismoon(loader.Module):
     """Автофарм в ирисе"""
 
     strings = {
-        "name": "IrisAutoFarm",
+        "name": "Irismoon",
     }
 
     def init(self):
@@ -48,8 +48,8 @@ class IrisAutoFarm(loader.Module):
             return response
    
     @loader.command()
-    async def блэкстарт(self, message):
-        """Завести таймеры в Iris Black Diamond"""
+    async def moonlightfarm(self, message):
+        """Завести таймеры в Iris Moonlight Dyla"""
         await utils.answer(message, "Начинаю установку таймеров...")
         for i in range(100):
          timee = datetime.now()
