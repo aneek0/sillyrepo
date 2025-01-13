@@ -2,7 +2,8 @@ from .. import loader, utils
 from datetime import datetime, timedelta
 
 class DeleteMessages(loader.Module):
-    """Удаляет сообщения по времени, количеству, содержимому или с привязкой к ответу одномоментно."""
+    """Удаляет сообщения по времени, количеству, содержимому или с привязкой к ответу одномоментно.
+    ОН ТОЧНО РАБОТАЕТ"""
 
     strings = {"name": "DeleteMessages"}
 
