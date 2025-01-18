@@ -46,6 +46,7 @@ fileuploadmod
 fragmentcheck
 getpy
 gitrepo
+hash
 hiddenurl
 hoholmod
 irismoon
