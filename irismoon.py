@@ -53,7 +53,7 @@ class Irismoon(loader.Module):
         await utils.answer(message, "Начинаю установку таймеров...")
         for i in range(100):
          timee = datetime.now()
-         hours_to_add = 4.1 * (i + 1)
+         hours_to_add = 5.1 * (i + 1)
          schedule_time = timee + timedelta(hours=hours_to_add, minutes=5)
          await self.client.send_message('@iris_moon_bot', "Ферма", schedule=schedule_time)
         await utils.answer(message, "Таймеры успешно установлены!")
