@@ -1,1 +1,0 @@
-AI-support-Hikka.py
