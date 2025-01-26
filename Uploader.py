@@ -12,7 +12,7 @@ class UploaderMod(loader.Module):
 
     strings = {
         'name': 'Uploader',
-        'uploading': "🚀 <b>Загрузка...</b>',
+        'uploading': '🚀 <b>Загрузка...</b>',
         'no_file': '🚫 <b>Файл не найден.</b>',
         'uploaded': '🎡 <b>Файл <a href="{0}">загружен</a></b>!\n\n<code>{0}</code>',
         'error': '🚫 <b>Ошибка загрузки:</b> <code>{0}</code>',
