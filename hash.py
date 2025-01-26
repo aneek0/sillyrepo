@@ -1,3 +1,6 @@
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
+
 import hashlib
 from telethon.tl.types import Message
 from .. import loader, utils

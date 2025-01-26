@@ -1,11 +1,5 @@
-#---------------------------------------------------------------------------------
-# Name: Userinfo
-# Description: Показывает информацию о юзере, а также из фанстата
-# Author: @Azu_nyyyyyyaaaaan
-# Commands:
-# userinfo
-# ---------------------------------------------------------------------------------
-# meta developer: @Azu_nyyyyyyaaaaan
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import requests
 import asyncio

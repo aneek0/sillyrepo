@@ -1,8 +1,5 @@
-# ---------------------------------------------------------------------------------
-# Name: valutator
-# Description: Valute converter
-# Author: @Azu_nyyyyyyaaaaan
-# --------------------------------------------------------------------------------
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import asyncio
 from telethon import events

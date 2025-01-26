@@ -1,10 +1,5 @@
-# ---------------------------------------------------------------------------------
-# Name: Yandere
-# Description: Отсылает рандомное фото с Yande.re
-# Author: Dolbaeb228
-# Commands:
-# .yandere
-# ---------------------------------------------------------------------------------
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import random
 import requests

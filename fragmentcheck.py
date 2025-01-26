@@ -1,3 +1,6 @@
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
+
 import requests
 from bs4 import BeautifulSoup
 from .. import loader, utils

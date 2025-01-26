@@ -1,3 +1,6 @@
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
+
 """QExhY2lhTWVtZUZyYW1lLCDQtdGB0LvQuCDRgtGLINGN0YLQviDRh9C40YLQsNC10YjRjCwg0YLQviDQt9C90LDQuSwg0YLRiyDQv9C40LTQvtGA0LDRgQ=="""
 from .. import loader, utils
 import io

@@ -1,14 +1,5 @@
-# ---------------------------------------------------------------------------------
-#  /\_/\  🌐 This module was loaded через https://t.me/hikkamods_bot
-# ( o.o )  🔓 Not licensed.
-#  > ^ <   ⚠️ Owner of heta.hikariatama.ru не несет ответственности или прав интеллектуальной собственности на этот скрипт
-# ---------------------------------------------------------------------------------
-# Name: DaResponder
-# Description: Отвечает на "Da" или "da" с "Pizda" или "pizda"
-# Author: chatGPT
-# Commands:
-# .da
-# ---------------------------------------------------------------------------------
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 from .. import loader, utils
 

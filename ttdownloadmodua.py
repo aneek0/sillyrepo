@@ -1,16 +1,6 @@
-# ---------------------------------------------------------------------------------
-#  /\_/\  🌐 This module was loaded через https://t.me/hikkamods_bot
-# ( o.o )  🔓 Не лицензировано.
-#  > ^ <   ⚠️ Владелец heta.hikariatama.ru не несет ответственности или интеллектуальных прав на этот скрипт
-# ---------------------------------------------------------------------------------
-# Name: TTDownloadMod
-# Description: Скачать видео/фото/аудио из TikTok
-# Author: chatGPT
-# Commands:
-# .ttd {link}
-# ---------------------------------------------------------------------------------
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
-# meta developer: chatGPT
 import re
 import asyncio
 from telethon import events

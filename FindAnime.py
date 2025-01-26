@@ -1,8 +1,5 @@
-# meta pic: https://static.whypodg.me/mods!animetools.png
-# meta banner: https://mods.whypodg.me/badges/animetools.jpg
-# meta developer: @idiotcoders & @Azu_nyyyyyyaaaaan (redactor)
-# scope: hikka_only
-# scope: hikka_min 1.2.10
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import mimetypes
 import os

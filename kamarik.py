@@ -1,20 +1,5 @@
-# ---------------------------------------------------------------------------------
-#  /\_/\  🌐 This module was loaded through https://t.me/hikkamods_bot
-# ( o.o )  🔐 Licensed under the GNU AGPLv3.
-#  > ^ <   ⚠️ Owner of heta.hikariatama.ru doesn't take any responsibilities or intellectual property rights regarding this script
-# ---------------------------------------------------------------------------------
-# Name: kamarik
-# Author: marble team
-# Commands:
-# .kamar | .kamarik
-# ---------------------------------------------------------------------------------
-
-# █ █ █ █▄▀ ▄▀█ █▀▄▀█ █▀█ █▀█ █ █
-# █▀█ █ █ █ █▀█ █ ▀ █ █▄█ █▀▄ █▄█
-
-# 🔒 Licensed under the GNU GPLv3
-# 🌐 https://www.gnu.org/licenses/agpl-3.0.html
-# 👤 https://t.me/hikamoru
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 from .. import loader, utils
 import asyncio
