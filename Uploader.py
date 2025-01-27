@@ -61,18 +61,20 @@ class UploaderMod(loader.Module):
 
     async def handle_upload(self, message: Message, service: str):
         """Обработка загрузки файла и вывод результата"""
-        await utils.answer(message, self.strings("uploading"))
+        # Редактируем исходное сообщение на "Загрузка..."
+        msg = await utils.answer(message, self.strings("uploading"))
+
         file = await self.get_file(message)
         if not file:
             return
 
         url = await self.upload_file(service, file)
         if url and not url.startswith("http"):
-            await utils.answer(message, self.strings("error").format(url))
+            await utils.answer(msg, self.strings("error").format(url))
         elif url:
-            await utils.answer(message, self.strings("uploaded").format(url))
+            await utils.answer(msg, self.strings("uploaded").format(url))
         else:
-            await utils.answer(message, self.strings("error").format("Неизвестная ошибка"))
+            await utils.answer(msg, self.strings("error").format("Неизвестная ошибка"))
 
     async def envscmd(self, message: Message):
         """Загрузить файл на envs.sh"""
