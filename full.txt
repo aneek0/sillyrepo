@@ -8,8 +8,6 @@ GitUploader
 HikariChat
 InlineCoin
 KomaruFarm
-LoveMagic
-Lyamusic
 MegaMozg
 Morze
 MyUsernames
@@ -50,12 +48,12 @@ hiddenurl
 hoholmod
 irismoon
 kamarik
-licenser
 lolim
 membersquery
 mtfmod
 newunitheta
 onlysqapi
+pdf
 scrs
 squareblur
 ss
@@ -64,5 +62,3 @@ upgradedeval
 url
 valutator
 yanderes
-yg_dice
-yg_ocr
