@@ -1,3 +1,4 @@
+AzuWeather
 Circles
 Daddyresponder
 Daresponder
@@ -15,6 +16,7 @@ NekosLife
 Pinger
 Rename
 RndNsfw
+Rp
 ScheduledMessages
 Spam
 Spoilers
@@ -54,6 +56,7 @@ mtfmod
 newunitheta
 onlysqapi
 pdf
+rp
 scrs
 squareblur
 ss
