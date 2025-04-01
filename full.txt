@@ -33,7 +33,6 @@ Vizjener
 Voicy
 Web2file
 WebShot
-YaNow
 base64
 batar
 batarry
@@ -53,9 +52,7 @@ kamarik
 lolim
 membersquery
 mtfmod
-newunitheta
 onlysqapi
-pdf
 rp
 scrs
 squareblur
