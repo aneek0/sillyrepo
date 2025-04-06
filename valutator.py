@@ -7,15 +7,8 @@ from telethon.errors.rpcerrorlist import YouBlockedUserError
 
 from .. import loader, utils
 
-
-def register(cb):
-    cb(ValuesMod())
-
-
-class ValuesMod(loader.Module):
-    """Работает с помощью бота @Deltatale_Currency_Converter_Bot
-    """
-
+class ValutatorMod(loader.Module):
+    """Работает с помощью бота @Deltatale_Currency_Converter_Bot"""
     strings = {"name": "Valutator"}
 
     async def currcmd(self, message):
@@ -25,19 +18,17 @@ class ValuesMod(loader.Module):
         """
         state = utils.get_args_raw(message)
         chat = "@Deltatale_Currency_Converter_Bot"
+        converting_msg = await utils.answer(message, "<emoji document_id=5346192260029489215>💵</emoji> <b>Конвертирую...</b>")
+        
         async with message.client.conversation(chat) as conv:
             try:
-                await message.edit("<emoji document_id=5346192260029489215>💵</emoji> <b>Конвертирую...</b>")
                 response = conv.wait_event(
                     events.NewMessage(incoming=True, from_users=6215875699)
                 )
-                bot_send_message = await message.client.send_message(
-                    chat, format(state)
-                )
-                bot_response = response = await response
+                bot_send_message = await message.client.send_message(chat, format(state))
+                bot_response = await response
             except YouBlockedUserError:
-                await message.edit("<b>Разблокируй</b> " + chat)
+                await converting_msg.edit("<b>Разблокируй</b> " + chat)
                 return
-            await bot_send_message.delete()
-            await message.edit(response.text)
-            await bot_response.delete()
+            await converting_msg.delete()
+            await message.respond(bot_response.text)
