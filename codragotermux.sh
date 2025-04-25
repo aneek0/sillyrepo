@@ -50,4 +50,4 @@ echo -e "\033[2J\033[3;1f"
 
 printf "\033[1;32mHikka is starting...\033[0m\n"
 
-eval "python3 -m hikka"
+eval "python3.10 -m hikka"
