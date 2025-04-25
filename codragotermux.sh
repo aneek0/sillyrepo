@@ -1,8 +1,6 @@
 #!/bin/bash
 
 echo -e "\033[2J\033[3;1f"
-
-eval "cat ~/Hikka/assets/download.txt"
 printf "\n\n\033[1;35mHikka is being installed... ✨\033[0m"
 
 echo -e "\n\n\033[0;96mInstalling base packages...\033[0m"
