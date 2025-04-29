@@ -37,10 +37,7 @@ class TTDownloadMod(loader.Module):
                     await message.client.send_file(message.to_id, msg.media, caption="Saved from TikTok link.")
         finally:
             message.client.remove_event_handler(media_handler, events.NewMessage(incoming=True, from_users=chat))
-            await bot_send_link.delete()
-            await message.delete()
             for msg in media_messages:
-                await msg.delete()
 
     async def ttacceptcmd(self, message):
         """.ttaccept {reply/id} для открытия в чате автоматического скачивания ссылок. без аргументов тоже работает.\n.ttaccept -l для показа открытых чатов"""
