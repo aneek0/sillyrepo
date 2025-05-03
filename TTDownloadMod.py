@@ -1,6 +1,3 @@
-# meta developer: Azu-nyyyyyyaaaaan
-# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
-
 import re
 import asyncio
 from telethon import events
@@ -32,15 +29,12 @@ class TTDownloadMod(loader.Module):
         message.client.add_event_handler(media_handler, events.NewMessage(incoming=True, from_users=chat))
         try:
             await asyncio.sleep(5)
-            for msg in media_messages:
-                if isinstance(msg.media, MessageMediaPhoto) or isinstance(msg.media, MessageMediaDocument):
-                    await message.client.send_file(message.to_id, msg.media, caption="Saved from TikTok link.")
+            if media_messages:
+                await message.client.forward_messages(message.to_id, [msg.id for msg in media_messages], chat)
         finally:
             message.client.remove_event_handler(media_handler, events.NewMessage(incoming=True, from_users=chat))
 
     async def ttacceptcmd(self, message):
-        """.ttaccept {reply/id} для открытия в чате автоматического скачивания ссылок. без аргументов тоже работает.\n.ttaccept -l для показа открытых чатов"""
-
         args = utils.get_args_raw(message)
         reply = await message.get_reply_message()
         users_list = self.db.get("TTsaveMod", "users", [])
@@ -89,28 +83,16 @@ class TTDownloadMod(loader.Module):
                     media_messages = []
 
                     async def handler(event):
-                        if event.message.sender_id == (await message.client.get_peer_id(chat)) and event.message.media:                            
+                        if event.message.sender_id == (await message.client.get_peer_id(chat)) and event.message.media:
                             media_messages.append(event.message)
 
-                    # Добавляем обработчик событий
                     message.client.add_event_handler(handler, events.NewMessage(incoming=True, from_users=chat))
 
                     try:
-                        await asyncio.sleep(5)  # Ждем ответы от бота в течение 2 секунд после последнего сообщения
+                        await asyncio.sleep(5)
                         if media_messages:
-                            photos = [msg.media for msg in media_messages if isinstance(msg.media, MessageMediaPhoto)]
-                            documents = [msg.media for msg in media_messages if isinstance(msg.media, MessageMediaDocument)]
-                            
-                            # Отправка фотографий
-                            if photos:
-                                await message.client.send_file(message.chat_id, photos, caption="По ссылке лень переходить было")
-
-                            # Отправка документов (видео/аудио)
-                            if documents:
-                                for doc in documents:
-                                    await message.client.send_file(message.chat_id, doc, caption="По ссылке лень переходить было")
+                            await message.client.forward_messages(message.chat_id, [msg.id for msg in media_messages], chat)
                     finally:
-                        # Удаляем обработчик событий и сообщения
                         message.client.remove_event_handler(handler, events.NewMessage(incoming=True, from_users=chat))
 
         except Exception as e:
