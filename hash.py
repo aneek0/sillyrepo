@@ -14,7 +14,7 @@ class HashMod(loader.Module):
         "name": "FileHash",
         "no_reply": "🚫 <b>Ответьте на сообщение с файлом</b>",
         "no_file": "🚫 <b>В сообщении нет файла</b>",
-        "hash_result": "📄 <b>Хеш файла:</b>\n\n<code>MD5:</code> {}\n<code>SHA-1:</code> {}\n<code>SHA-256:</code> {}",
+        "hash_result": "📄 <b>Хеш файла:</b>\n\nMD5: <code>{}</code>\nSHA-1: <code>{}</code>\nSHA-256: <code>{}</code>",
     }
 
     strings_ru = {
@@ -34,15 +34,12 @@ class HashMod(loader.Module):
             await utils.answer(message, self.strings("no_file"))
             return
 
-        # Скачиваем файл
         file_data = await reply.download_media(bytes)
 
-        # Вычисляем хеши
         md5_hash = hashlib.md5(file_data).hexdigest()
         sha1_hash = hashlib.sha1(file_data).hexdigest()
         sha256_hash = hashlib.sha256(file_data).hexdigest()
 
-        # Отправляем результат
         await utils.answer(
             message,
             self.strings("hash_result").format(md5_hash, sha1_hash, sha256_hash),
