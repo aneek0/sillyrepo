@@ -74,8 +74,9 @@ class TTDownloadMod(loader.Module):
                 for link in links:
                     await utils.answer(message, f"Отправляю ссылку в бот {chat}: {link}")
                     response = conv.wait_event(
-                        events.NewMessage(incoming=True, from_users=await message.client.get_peer_id(chat))
-                    )
+    events.NewMessage(incoming=True, from_users=await message.client.get_peer_id(chat),
+                      func=lambda e: e.message.media is not None)
+)
                     await conv.send_message(link)
                     bot_response = await response
 
