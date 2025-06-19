@@ -1,3 +1,4 @@
+AzuAI
 AzuWeather
 Circles
 Daddyresponder
@@ -38,6 +39,7 @@ batar
 batarry
 chs
 deletemessages
+dts
 fastfetch
 fdroid
 fileuploadmod
