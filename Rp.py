@@ -8,6 +8,9 @@ import re
 import requests
 from io import BytesIO
 from pdf2image import convert_from_bytes
+from PIL import Image
+import os # Import os for file operations
+import asyncio # Import asyncio for sleep if needed
 
 @loader.tds
 class Rp(loader.Module):
@@ -18,7 +21,8 @@ class Rp(loader.Module):
         "no_canteen": "<emoji document_id=5210952531676504517>❌</emoji> Не удалось загрузить расписание столовой! {error}",
         "loading": "⏳ Загружаю расписание...",
         "schedule_found": "<emoji document_id=5431897022456145283>📆</emoji> Расписание для 1-ОТС-1 на {date}:\n{pairs}",
-        "canteen_loading": "<b>Скачивание и обработка PDF...</b>"
+        "canteen_loading": "<b>Скачивание и обработка PDF...</b>",
+        "temp_file_error": "<emoji document_id=5210952531676504517>❌</emoji> Ошибка при работе с временным файлом: {error}"
     }
 
     # Время звонков для каждой пары
@@ -119,6 +123,8 @@ class Rp(loader.Module):
         """Скачать PDF и отправить первую страницу как изображение"""
         await utils.answer(message, self.strings["canteen_loading"])
         
+        temp_file_path = "canteen_schedule_temp.jpg" # Define a temporary file name
+
         try:
             # Скачиваем PDF-файл
             pdf_url = "https://www.novkrp.ru/data/covid_pit.pdf"
@@ -133,21 +139,36 @@ class Rp(loader.Module):
                 raise Exception("PDF слишком большой (>10 МБ)")
             
             # Преобразуем PDF в изображения
-            images = convert_from_bytes(response.content, first_page=1, last_page=1)
+            images = convert_from_bytes(response.content, first_page=1, last_page=1, dpi=300) 
             if not images:
                 raise Exception("PDF не содержит страниц")
             
-            # Отправляем первую страницу как изображение без подписи
-            with BytesIO() as output:
-                images[0].save(output, format="JPEG")
-                output.seek(0)
-                await self._client.send_file(
-                    message.peer_id,
-                    output,
-                    reply_to=message.reply_to_msg_id or message.id,
-                )
+            # Сохраняем изображение во временный файл
+            images[0].save(temp_file_path, format="JPEG")
+
+            # Отправляем файл как фото
+            await self._client.send_file(
+                message.peer_id,
+                file=temp_file_path, # Pass the path to the temporary file
+                caption="", # No caption needed
+                link_preview=False, # Sometimes helps prevent it from being treated as a document with a link
+                reply_to=message.reply_to_msg_id or message.id,
+                # Explicitly set as photo if the client supports it, but usually not needed for local files
+                # if you want to be extra sure, you can try force_document=False, but for local files, 
+                # Telethon typically infers the type correctly from the extension.
+            )
             
             await message.delete()  # Удаляем исходное сообщение после отправки
         
         except Exception as e:
             await utils.answer(message, f"<b>Ошибка:</b> {str(e)}")
+        finally:
+            # Clean up: remove the temporary file
+            if os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                except Exception as e:
+                    # Log or report error if file can't be removed, but don't stop execution
+                    await utils.answer(message, self.strings["temp_file_error"].format(error=str(e)))
+
+
