@@ -43,10 +43,19 @@ class Web2fileMod(loader.Module):
         if not website.startswith("http"):
             website = "http://" + website
 
+        # Delete the original message
+        await message.delete()
+
+        # Create new message for progress
+        progress_message = await self._client.send_message(
+            message.chat_id,
+            self.strings("progress_download", message).format(0, "0 B/s")
+        )
+
         try:
             response = requests.get(website, stream=True)
             if response.status_code != 200:
-                await utils.answer(message, f"🚫 <b>Error {response.status_code}: {response.reason}</b>")
+                await utils.answer(progress_message, f"🚫 <b>Error {response.status_code}: {response.reason}</b>")
                 return
 
             total_size = int(response.headers.get('Content-Length', 0))
@@ -57,8 +66,6 @@ class Web2fileMod(loader.Module):
 
             last_update_time = time.time()
             last_progress = 0
-
-            await message.edit(self.strings("progress_download", message).format(0, "0 B/s"))
 
             for chunk in response.iter_content(chunk_size=1024):
                 if chunk:
@@ -72,7 +79,7 @@ class Web2fileMod(loader.Module):
                     speed_str = self.format_speed(speed)
 
                     if time.time() - last_update_time >= 1 and int(progress) != last_progress:
-                        await message.edit(self.strings("progress_download", message).format(int(progress), speed_str))
+                        await progress_message.edit(self.strings("progress_download", message).format(int(progress), speed_str))
                         last_update_time = time.time()
                         last_progress = int(progress)
 
@@ -81,10 +88,10 @@ class Web2fileMod(loader.Module):
             f.name = website.split("/")[-1] or "file"
 
         except requests.exceptions.RequestException as e:
-            await utils.answer(message, f"🚫 <b>Request error: {e}</b>")
+            await utils.answer(progress_message, f"🚫 <b>Request error: {e}</b>")
             return
         except Exception as e:
-            await utils.answer(message, f"🚫 <b>Unexpected error: {e}</b>")
+            await utils.answer(progress_message, f"🚫 <b>Unexpected error: {e}</b>")
             return
 
         caption = f"📥 Downloaded from: <code>{website}</code>"
@@ -94,10 +101,10 @@ class Web2fileMod(loader.Module):
             message.chat_id,
             file=f,
             caption=caption,
-            progress_callback=lambda current, total: self._update_progress_upload(current, total, message),
+            progress_callback=lambda current, total: self._update_progress_upload(current, total, progress_message),
         )
 
-        await message.delete()
+        await progress_message.delete()
 
     async def _update_progress_upload(self, current: int, total: int, message: Message):
         progress = (current / total) * 100
