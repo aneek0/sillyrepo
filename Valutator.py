@@ -8,7 +8,7 @@ from telethon.errors.rpcerrorlist import YouBlockedUserError
 from .. import loader, utils
 
 class ValutatorMod(loader.Module):
-    """Работает с помощью бота @Deltatale_Currency_Converter_Bot"""
+    """Работает с помощью бота @aneekocurrency_bot"""
     strings = {"name": "Valutator"}
 
     async def currcmd(self, message):
@@ -17,7 +17,7 @@ class ValutatorMod(loader.Module):
         Пример: '.curr 5000 рублей/руб/rub/RUB'
         """
         state = utils.get_args_raw(message)
-        chat = "@Deltatale_Currency_Converter_Bot"
+        chat = "@aneekocurrency_bot"
         converting_msg = await utils.answer(message, "<emoji document_id=5346192260029489215>💵</emoji> <b>Конвертирую...</b>")
         
         async with message.client.conversation(chat) as conv:
