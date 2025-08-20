@@ -19,15 +19,7 @@ class Web2fileMod(loader.Module):
         "progress_upload": "📤 <b>Uploading:</b> {0}% at {1}/s",
     }
 
-    strings_ru = {
-        "no_args": "🚫 <b>Укажи ссылку</b>",
-        "fetch_error": "🚫 <b>Ошибка загрузки</b>",
-        "progress_download": "📥 <b>Загрузка:</b> {0}% со скоростью {1}/с",
-        "progress_upload": "📤 <b>Отправка:</b> {0}% со скоростью {1}/с",
-        "_cls_doc": "Скачивает содержимое ссылки и отправляет в виде файла",
-    }
-
-    async def web2filecmd(self, message: Message):
+    async def w2fc-md(self, message: Message):
         website = utils.get_args_raw(message)
 
         if not website:
