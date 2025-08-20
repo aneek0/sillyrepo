@@ -19,7 +19,7 @@ class Web2fileMod(loader.Module):
         "progress_upload": "📤 <b>Uploading:</b> {0}% at {1}/s",
     }
 
-    async def w2fc-md(self, message: Message):
+    async def w2fcmd(self, message: Message):
         website = utils.get_args_raw(message)
 
         if not website:
