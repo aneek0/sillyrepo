@@ -19,24 +19,66 @@ class ValutatorMod(loader.Module):
         state = utils.get_args_raw(message)
         chat = "@aneekocurrency_bot"
         
-        # Редактируем исходное сообщение, чтобы показать, что мы работаем
-        await utils.answer(message, "<emoji document_id=5346192260029489215>💵</emoji> <b>Конвертирую...</b>")
+        # Отправляем временное сообщение о том, что мы работаем
+        temp_msg = await message.respond("<emoji document_id=5346192260029489215>💵</emoji> <b>Конвертирую...</b>")
         
-        async with message.client.conversation(chat) as conv:
+        try:
+            # Отправляем сообщение боту
+            bot_send_message = await message.client.send_message(chat, format(state))
+            
+            # Ждём ответа от бота (максимум 30 секунд)
+            async def wait_for_response():
+                try:
+                    async for event in message.client.iter_messages(chat, limit=1, reverse=True):
+                        if event.id > bot_send_message.id:
+                            return event
+                    
+                    # Если не нашли сообщение выше, ждём новое
+                    async for event in message.client.iter_messages(chat, limit=1):
+                        if event.id > bot_send_message.id:
+                            return event
+                    
+                    return None
+                except Exception:
+                    return None
+            
+            # Ждём ответа с таймаутом
             try:
-                # Отправляем запрос боту и ждём ответа
-                # Используем from_users=chat для поиска по имени пользователя
-                response = conv.wait_event(
-                    events.NewMessage(incoming=True, from_users=chat)
-                )
-                bot_send_message = await message.client.send_message(chat, format(state))
-                bot_response = await response
+                bot_response = await asyncio.wait_for(wait_for_response(), timeout=30.0)
+                if bot_response:
+                    # Удаляем временное сообщение
+                    await temp_msg.delete()
+                    # Удаляем сообщение с командой
+                    await message.delete()
+                    # Отправляем новое сообщение с ответом от бота
+                    await message.respond(bot_response.text)
+                else:
+                    # Удаляем временное сообщение
+                    await temp_msg.delete()
+                    # Удаляем сообщение с командой
+                    await message.delete()
+                    # Отправляем сообщение об ошибке
+                    await message.respond("<b>Не удалось получить ответ от бота</b>")
+            except asyncio.TimeoutError:
+                # Удаляем временное сообщение
+                await temp_msg.delete()
+                # Удаляем сообщение с командой
+                await message.delete()
+                # Отправляем сообщение о таймауте
+                await message.respond("<b>Таймаут ожидания ответа от бота</b>")
                 
-            except YouBlockedUserError:
-                # Если пользователь заблокировал бота
-                await message.edit("<b>Разблокируй</b> " + chat)
-                return
-
-            # После получения ответа от бота, редактируем исходное сообщение
-            # с результатом
-            await message.edit(bot_response.text)
+        except YouBlockedUserError:
+            # Удаляем временное сообщение
+            await temp_msg.delete()
+            # Удаляем сообщение с командой
+            await message.delete()
+            # Отправляем сообщение об ошибке блокировки
+            await message.respond("<b>Разблокируй</b> " + chat)
+            return
+        except Exception as e:
+            # Удаляем временное сообщение
+            await temp_msg.delete()
+            # Удаляем сообщение с командой
+            await message.delete()
+            # Отправляем сообщение об ошибке
+            await message.respond(f"<b>Ошибка:</b> {str(e)}")
