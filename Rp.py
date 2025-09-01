@@ -27,12 +27,12 @@ class Rp(loader.Module):
 
     # Время звонков для каждой пары
     pair_times = {
-        "1": {"start": "08:30", "end": "09:50"},
-        "2": {"start": "10:00", "end": "11:20"},
-        "3": {"start": "11:30", "end": "12:50"},
-        "4": {"start": "13:00", "end": "14:20"},
-        "5": {"start": "14:30", "end": "15:50"},
-        "6": {"start": "16:00", "end": "17:20"}
+        "1": {"start": "08:30", "end": "09:40"},
+        "2": {"start": "09:50", "end": "11:00"},
+        "3": {"start": "11:10", "end": "12:20"},
+        "4": {"start": "12:30", "end": "13:40"},
+        "5": {"start": "13:50", "end": "15:00"},
+        "6": {"start": "15:10", "end": "16:20"}
     }
 
     async def rpcmd(self, message):
@@ -79,7 +79,7 @@ class Rp(loader.Module):
                     # Ищем индекс столбца с группой
                     group_index = -1
                     for i, header in enumerate(headers):
-                        if "1-ОТС-1" in header:
+                        if "2-ОТС-1" in header:
                             group_index = i
                             break
 
@@ -170,5 +170,4 @@ class Rp(loader.Module):
                 except Exception as e:
                     # Log or report error if file can't be removed, but don't stop execution
                     await utils.answer(message, self.strings["temp_file_error"].format(error=str(e)))
-
 
