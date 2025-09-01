@@ -14,7 +14,7 @@ import asyncio # Import asyncio for sleep if needed
 
 @loader.tds
 class Rp(loader.Module):
-    """Получает расписание пар и столовой для группы 1-ОТС-1 с сайта novkrp.ru"""
+    """Получает расписание пар и столовой для группы 2-ОТС-1 с сайта novkrp.ru"""
     strings = {
         "name": "Rp",
         "no_schedule": "<emoji document_id=5210952531676504517>❌</emoji> Не удалось найти расписание для группы 1-ОТС-1!",
