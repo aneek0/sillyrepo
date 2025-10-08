@@ -14,7 +14,7 @@ class base64Mod(loader.Module):
     strings = {"name": "base64"}
 
     @loader.owner
-    async def b64encodecmd(self, message):
+    async def b64ecmd(self, message):
         """.b64encode <(text or media) or (reply to text or media)>"""
         reply = await message.get_reply_message()
         mtext = utils.get_args_raw(message)
@@ -44,7 +44,7 @@ class base64Mod(loader.Module):
             await message.edit(str(output, "utf-8"))
 
     @loader.owner
-    async def b64decodecmd(self, message):
+    async def b64dcmd(self, message):
         """.b64decode <text or reply to text>"""
         reply = await message.get_reply_message()
         mtext = utils.get_args_raw(message)
