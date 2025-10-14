@@ -7,167 +7,370 @@ from bs4 import BeautifulSoup
 import re
 import requests
 from io import BytesIO
-from pdf2image import convert_from_bytes
-from PIL import Image
-import os # Import os for file operations
-import asyncio # Import asyncio for sleep if needed
+from datetime import datetime
+import time
+
+# Импортируем библиотеку для работы с PDF
+import fitz  # pymupdf
 
 @loader.tds
 class Rp(loader.Module):
     """Получает расписание пар и столовой для группы 2-ОТС-1 с сайта novkrp.ru"""
     strings = {
         "name": "Rp",
-        "no_schedule": "<emoji document_id=5210952531676504517>❌</emoji> Не удалось найти расписание для группы 1-ОТС-1!",
+        "no_schedule": "<emoji document_id=5210952531676504517>❌</emoji> Не удалось найти расписание для группы 2-ОТС-1!",
         "no_canteen": "<emoji document_id=5210952531676504517>❌</emoji> Не удалось загрузить расписание столовой! {error}",
         "loading": "⏳ Загружаю расписание...",
-        "schedule_found": "<emoji document_id=5431897022456145283>📆</emoji> Расписание для 1-ОТС-1 на {date}:\n{pairs}",
-        "canteen_loading": "<b>Скачивание и обработка PDF...</b>",
+        "schedule_found": "<emoji document_id=5431897022456145283>📆</emoji> Расписание для 2-ОТС-1 на {date}:\n{pairs}",
+        "canteen_loading": "<b>⏳ Извлекаю расписание столовой из PDF...</b>",
         "temp_file_error": "<emoji document_id=5210952531676504517>❌</emoji> Ошибка при работе с временным файлом: {error}"
     }
+    
+    def __init__(self):
+        # Кеш для HTTP сессий
+        self._session_cache = {}
+        self._last_cleanup = time.time()
+        self._cache_ttl = 300  # 5 минут
+    
+    # Константы для регулярных выражений
+    DATE_PATTERN = re.compile(r"\d{2}\s[а-яА-Я]+\s2025г\.")
+    PAIR_NUMBER_PATTERN = re.compile(r"[^0-7]")
+    GROUP_PATTERNS = [
+        re.compile(r'2-ОТС\s*-?\s*1', re.IGNORECASE),
+        re.compile(r'2\s*-\s*ОТС\s*-\s*1', re.IGNORECASE),
+        re.compile(r'2-ОТС-1', re.IGNORECASE),
+        re.compile(r'2\s+ОТС\s+1', re.IGNORECASE)
+    ]
+    TIME_PATTERN = re.compile(r'(\d+)\s+(\d{1,2}[:.]\d{2}\s*-\s*\d{1,2}[:.]\d{2})')
+    OTHER_GROUPS_PATTERN = re.compile(r'\d+-[А-Я]+-\d+')
 
-    # Время звонков для каждой пары
-    pair_times = {
+    # Расписание звонков для обычных дней (вторник-суббота)
+    regular_pair_times = {
         "1": {"start": "08:30", "end": "09:40"},
         "2": {"start": "09:50", "end": "11:00"},
         "3": {"start": "11:10", "end": "12:20"},
         "4": {"start": "12:30", "end": "13:40"},
         "5": {"start": "13:50", "end": "15:00"},
-        "6": {"start": "15:10", "end": "16:20"}
+        "6": {"start": "15:10", "end": "16:20"},
+        "7": {"start": "16:30", "end": "17:40"}
     }
 
+    # Расписание звонков для понедельника (с классным часом)
+    monday_pair_times = {
+        "классный_час": {"start": "8:30", "end": "9:10"},
+        "1": {"start": "9:10", "end": "10:20"},
+        "2": {"start": "10:30", "end": "11:40"},
+        "3": {"start": "11:50", "end": "13:00"},
+        "4": {"start": "13:10", "end": "14:20"},
+        "5": {"start": "14:30", "end": "15:40"},
+        "6": {"start": "15:50", "end": "17:00"},
+        "7": {"start": "17:10", "end": "18:20"}
+    }
+
+    def is_monday_schedule(self, date_text="", html_content=""):
+        """Определяет, нужно ли показывать расписание звонков для понедельника"""
+        return any(keyword in (date_text + " " + html_content).lower() 
+                  for keyword in ["понедельник", "monday"])
+
+    def get_pair_times(self, is_monday=False):
+        """Возвращает расписание звонков"""
+        return self.monday_pair_times if is_monday else self.regular_pair_times
+
+    def _get_optimized_session(self, is_async=True):
+        """Получает оптимизированную HTTP сессию с кешированием"""
+        current_time = time.time()
+        
+        # Очищаем старые сессии
+        if current_time - self._last_cleanup > self._cache_ttl:
+            self._session_cache.clear()
+            self._last_cleanup = current_time
+        
+        session_key = f"async_{is_async}"
+        
+        if session_key not in self._session_cache:
+            if is_async:
+                # Оптимизированная aiohttp сессия
+                connector = aiohttp.TCPConnector(
+                    limit=10,  # Максимум соединений
+                    limit_per_host=5,  # Максимум соединений на хост
+                    keepalive_timeout=30,  # Keep-alive
+                    enable_cleanup_closed=True
+                )
+                timeout = aiohttp.ClientTimeout(
+                    total=10,  # Общий таймаут
+                    connect=5,  # Таймаут подключения
+                    sock_read=5  # Таймаут чтения
+                )
+                self._session_cache[session_key] = aiohttp.ClientSession(
+                    connector=connector,
+                    timeout=timeout,
+                    headers={
+                        'User-Agent': 'Mozilla/5.0 (compatible; ScheduleBot/1.0)',
+                        'Accept-Encoding': 'gzip, deflate',  # Сжатие
+                        'Connection': 'keep-alive'
+                    }
+                )
+            else:
+                # Оптимизированная requests сессия
+                session = requests.Session()
+                session.headers.update({
+                    'User-Agent': 'Mozilla/5.0 (compatible; ScheduleBot/1.0)',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive'
+                })
+                # Настройка адаптера для переиспользования соединений
+                adapter = requests.adapters.HTTPAdapter(
+                    pool_connections=5,
+                    pool_maxsize=10,
+                    max_retries=2
+                )
+                session.mount('http://', adapter)
+                session.mount('https://', adapter)
+                self._session_cache[session_key] = session
+        
+        return self._session_cache[session_key]
+
+    async def _cleanup_sessions(self):
+        """Очищает HTTP сессии"""
+        for session in self._session_cache.values():
+            if hasattr(session, 'close'):
+                if hasattr(session, '__aenter__'):  # aiohttp session
+                    await session.close()
+                else:  # requests session
+                    session.close()
+        self._session_cache.clear()
+
     async def rpcmd(self, message):
-        """Команда .rp - получает расписание для группы 1-ОТС-1"""
+        """Команда .rp - получает расписание для группы 2-ОТС-1"""
         await utils.answer(message, self.strings["loading"])
 
-        url = "https://novkrp.ru/raspisanie.htm"
-
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(url, timeout=15) as resp:
-                    if resp.status != 200:
-                        await utils.answer(message, self.strings["no_schedule"])
-                        return
-                    html = await resp.text()
-
-                # Парсинг HTML
-                soup = BeautifulSoup(html, "html.parser")
-
-                # Ищем дату
-                date_match = soup.find(string=re.compile(r"\d{2}\s[а-яА-Я]+\s2025г\."))
-                if date_match:
-                    date = re.sub(r"[,.]\s*", " ", date_match.strip())
-                    date = re.sub(r"\s+", " ", date)
-                else:
-                    date = "неизвестную дату"
-
-                # Ищем таблицу с расписанием
-                tables = soup.find_all("table")
-                if not tables:
+        try:
+            # Используем оптимизированную сессию
+            session = self._get_optimized_session(is_async=True)
+            
+            async with session.get("https://novkrp.ru/raspisanie.htm") as resp:
+                if resp.status != 200:
                     await utils.answer(message, self.strings["no_schedule"])
                     return
+                html = await resp.text()
 
-                pairs = []
-                for table in tables:
-                    rows = table.find_all("tr")
-                    if not rows:
-                        continue
+            soup = BeautifulSoup(html, "html.parser")
+            
+            # Извлекаем дату
+            date_match = soup.find(string=self.DATE_PATTERN)
+            date = re.sub(r"\s+", " ", re.sub(r"[,.]\s*", " ", date_match.strip())) if date_match else "неизвестную дату"
 
-                    # Первая строка — заголовки
-                    header_row = rows[0]
-                    headers = [cell.get_text(strip=True) for cell in header_row.find_all(["th", "td"])]
+            # Определяем тип расписания
+            is_monday = self.is_monday_schedule(date, html)
+            pair_times = self.get_pair_times(is_monday)
 
-                    # Ищем индекс столбца с группой
-                    group_index = -1
-                    for i, header in enumerate(headers):
-                        if "2-ОТС-1" in header:
-                            group_index = i
-                            break
+            # Извлекаем пары
+            pairs = self._extract_pairs(soup, pair_times, is_monday)
+            
+            if not pairs or (is_monday and len(pairs) == 1):
+                await utils.answer(message, self.strings["no_schedule"])
+                return
 
-                    if group_index == -1:
-                        continue
+            # Формируем ответ
+            day_info = " (понедельник - с классным часом)" if is_monday else ""
+            reply = self.strings["schedule_found"].format(
+                date=date + day_info, 
+                pairs="\n".join(pairs)
+            )
+            await utils.answer(message, reply)
 
-                    # Извлекаем пары из строк таблицы
-                    for row in rows[1:]:
-                        cells = row.find_all(["td", "th"])
-                        if len(cells) <= group_index:
-                            continue
+        except Exception as e:
+            await utils.answer(message, f"<emoji document_id=5210952531676504517>❌</emoji> Ошибка: {str(e)}")
 
-                        pair_number = cells[0].get_text(strip=True)
-                        # Нормализуем номер пары (убираем "пара", "я", "-я" и пробелы)
-                        pair_number = re.sub(r"[^0-6]", "", pair_number)
-                        if not pair_number:
-                            continue
+    def _extract_pairs(self, soup, pair_times, is_monday):
+        """Извлекает пары из HTML"""
+        pairs = []
+        
+        # Добавляем классный час для понедельника
+        if is_monday:
+            class_time = pair_times["классный_час"]
+            pairs.append(f"Классный час ({class_time['start']}-{class_time['end']})")
 
-                        pair_info = " ".join(cells[group_index].get_text(separator=" ").split())
-                        if pair_info:
-                            pair_info = re.sub(r"([а-яА-Я])([А-Я])", r"\1 \2", pair_info)
-                            pair_info = re.sub(r"([а-яА-Я])\s*Ауд\.(\d+)", r"\1 Ауд.\2", pair_info)
-                            # Добавляем время звонков
-                            pair_time = self.pair_times.get(pair_number, {"start": "время", "end": "неизвестно"})
-                            pairs.append(f"{pair_number} пара ({pair_time['start']}-{pair_time['end']}): {pair_info}")
+        # Ищем таблицы с расписанием
+        for table in soup.find_all("table"):
+            rows = table.find_all("tr")
+            if not rows:
+                continue
 
-                if not pairs:
-                    await utils.answer(message, self.strings["no_schedule"])
-                    return
+            # Находим индекс столбца с группой
+            headers = [cell.get_text(strip=True) for cell in rows[0].find_all(["th", "td"])]
+            group_index = next((i for i, header in enumerate(headers) if "2-ОТС-1" in header), -1)
+            
+            if group_index == -1:
+                continue
 
-                # Форматируем расписание пар
-                formatted_pairs = "\n".join(pairs)
-                reply = self.strings["schedule_found"].format(date=date, pairs=formatted_pairs)
+            # Извлекаем пары
+            for row in rows[1:]:
+                cells = row.find_all(["td", "th"])
+                if len(cells) <= group_index:
+                    continue
 
-                await utils.answer(message, reply)
+                pair_number = self.PAIR_NUMBER_PATTERN.sub("", cells[0].get_text(strip=True))
+                if not pair_number:
+                    continue
 
-            except Exception as e:
-                await utils.answer(message, f"<emoji document_id=5210952531676504517>❌</emoji> Ошибка: {str(e)}")
+                pair_info = self._format_pair_info(cells[group_index].get_text(separator=" "))
+                if pair_info:
+                    pair_time = pair_times.get(pair_number, {"start": "время", "end": "неизвестно"})
+                    pairs.append(f"{pair_number} пара ({pair_time['start']}-{pair_time['end']}): {pair_info}")
+
+        return pairs
+
+    def _format_pair_info(self, text):
+        """Форматирует информацию о паре"""
+        if not text:
+            return ""
+        
+        # Очищаем и форматируем текст
+        text = " ".join(text.split())
+        text = re.sub(r"([а-яА-Я])([А-Я])", r"\1 \2", text)
+        text = re.sub(r"([а-яА-Я])\s*Ауд\.(\d+)", r"\1 Ауд.\2", text)
+        return text
 
     async def stcmd(self, message):
-        """Скачать PDF и отправить первую страницу как изображение"""
+        """Извлечь расписание столовой для группы 2-ОТС-1 из PDF"""
         await utils.answer(message, self.strings["canteen_loading"])
-        
-        temp_file_path = "canteen_schedule_temp.jpg" # Define a temporary file name
 
         try:
-            # Скачиваем PDF-файл
-            pdf_url = "https://www.novkrp.ru/data/covid_pit.pdf"
-            response = requests.get(pdf_url, timeout=15)
+            # Скачиваем и извлекаем текст из PDF
+            full_text = await self._extract_pdf_text()
+            if not full_text:
+                raise Exception("Не удалось извлечь текст из PDF")
             
-            if response.status_code != 200:
-                raise Exception(f"Не удалось скачать PDF: статус {response.status_code}")
-            
-            # Проверяем размер файла
-            content_length = len(response.content)
-            if content_length > 10 * 1024 * 1024:  # 10 МБ
-                raise Exception("PDF слишком большой (>10 МБ)")
-            
-            # Преобразуем PDF в изображения
-            images = convert_from_bytes(response.content, first_page=1, last_page=1, dpi=300) 
-            if not images:
-                raise Exception("PDF не содержит страниц")
-            
-            # Сохраняем изображение во временный файл
-            images[0].save(temp_file_path, format="JPEG")
-
-            # Отправляем файл как фото
-            await self._client.send_file(
-                message.peer_id,
-                file=temp_file_path, # Pass the path to the temporary file
-                caption="", # No caption needed
-                link_preview=False, # Sometimes helps prevent it from being treated as a document with a link
-                reply_to=message.reply_to_msg_id or message.id,
-                # Explicitly set as photo if the client supports it, but usually not needed for local files
-                # if you want to be extra sure, you can try force_document=False, but for local files, 
-                # Telethon typically infers the type correctly from the extension.
-            )
-            
-            await message.delete()  # Удаляем исходное сообщение после отправки
+            # Ищем расписание для группы
+            result = self._find_group_schedule(full_text)
+            if result:
+                await utils.answer(message, result)
+            else:
+                await utils.answer(message, "<b>❌ Группа 2-ОТС-1 не найдена в расписании столовой</b>")
         
         except Exception as e:
-            await utils.answer(message, f"<b>Ошибка:</b> {str(e)}")
-        finally:
-            # Clean up: remove the temporary file
-            if os.path.exists(temp_file_path):
-                try:
-                    os.remove(temp_file_path)
-                except Exception as e:
-                    # Log or report error if file can't be removed, but don't stop execution
-                    await utils.answer(message, self.strings["temp_file_error"].format(error=str(e)))
+            await utils.answer(message, f"<b>❌ Ошибка:</b> {str(e)}")
 
+    async def _extract_pdf_text(self):
+        """Извлекает текст из PDF файла используя pymupdf"""
+        pdf_url = "https://www.novkrp.ru/data/covid_pit.pdf"
+        
+        # Используем оптимизированную сессию
+        session = self._get_optimized_session(is_async=False)
+        
+        try:
+            response = session.get(pdf_url, stream=True)
+            response.raise_for_status()
+            
+            # Проверяем размер файла по заголовку Content-Length
+            content_length = response.headers.get('content-length')
+            if content_length and int(content_length) > 10 * 1024 * 1024:  # 10 МБ
+                raise Exception("PDF слишком большой (>10 МБ)")
+            
+            # Читаем содержимое по частям для экономии памяти
+            content = BytesIO()
+            for chunk in response.iter_content(chunk_size=8192):
+                content.write(chunk)
+                if content.tell() > 10 * 1024 * 1024:  # 10 МБ
+                    raise Exception("PDF слишком большой (>10 МБ)")
+            
+            content.seek(0)
+            
+            # Используем pymupdf для извлечения текста
+            try:
+                pdf_document = fitz.open(stream=content.read(), filetype="pdf")
+                full_text = ""
+                
+                # Извлекаем текст со всех страниц
+                for page_num in range(pdf_document.page_count):
+                    page = pdf_document[page_num]
+                    text = page.get_text()
+                    if text:
+                        full_text += text + "\n"
+                
+                pdf_document.close()
+                return full_text.strip()
+                
+            except Exception as e:
+                raise Exception(f"Ошибка pymupdf: {str(e)}")
+            
+        finally:
+            response.close()
+
+    def _find_group_schedule(self, full_text):
+        """Ищет расписание для группы 2-ОТС-1"""
+        clean_text = re.sub(r'\s+', ' ', full_text)
+        
+        # Ищем группу и связанное с ней время
+        for pattern in self.GROUP_PATTERNS:
+            match = pattern.search(clean_text)
+            if match:
+                # Ищем время перед группой
+                text_before = clean_text[:match.start()]
+                time_matches = list(self.TIME_PATTERN.finditer(text_before))
+                
+                if time_matches:
+                    last_match = time_matches[-1]
+                    found_number = last_match.group(1)
+                    found_time = last_match.group(2)
+                    
+                    # Проверяем, что между временем и группой нет других групп
+                    text_between = clean_text[last_match.end():match.start()]
+                    other_groups = [g for g in self.OTHER_GROUPS_PATTERN.findall(text_between) 
+                                  if not pattern.search(g)]
+                    
+                    if not other_groups:
+                        return self._format_canteen_result(found_number, found_time)
+        
+        # Если точное время не найдено, ищем в контексте строк
+        return self._find_context_schedule(full_text)
+
+    def _find_context_schedule(self, full_text):
+        """Ищет расписание в контексте строк"""
+        lines = full_text.split('\n')
+        
+        for i, line in enumerate(lines):
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+            
+            # Проверяем, есть ли наша группа в этой строке
+            if any(pattern.search(line_stripped) for pattern in self.GROUP_PATTERNS):
+                # Собираем контекст из нескольких строк
+                context_start = max(0, i - 3)
+                context_text = " ".join(lines[j].strip() for j in range(context_start, i + 1))
+                
+                # Ищем время в контексте
+                time_matches = list(self.TIME_PATTERN.finditer(context_text))
+                if time_matches:
+                    last_match = time_matches[-1]
+                    number = last_match.group(1)
+                    time = last_match.group(2)
+                    
+                    # Проверяем, что группа действительно связана с этим временем
+                    after_time = context_text[last_match.end():].strip()
+                    if any(pattern.search(after_time) for pattern in self.GROUP_PATTERNS):
+                        groups_text = re.split(r'\d+\s+пара|\d+\s+\d{1,2}[:.]\d{2}', after_time)[0].strip()
+                        return self._format_canteen_result(number, time, groups_text)
+        
+        return None
+
+    def _format_canteen_result(self, number, time, groups=""):
+        """Форматирует результат расписания столовой"""
+        result_parts = [
+            "<b>🍽 Расписание столовой для группы 2-ОТС-1:</b>\n",
+            f"📅 На {datetime.now().strftime('%d.%m.%Y')}\n",
+            f"⏰ {number}. {time}"
+        ]
+        
+        if groups:
+            clean_groups = re.sub(r'\s+', ' ', groups).strip()
+            if clean_groups:
+                result_parts.append(f"👥 {clean_groups}")
+        
+        return "\n".join(result_parts)
+
+    async def on_unload(self):
+        """Очищает ресурсы при выгрузке модуля"""
+        await self._cleanup_sessions()
