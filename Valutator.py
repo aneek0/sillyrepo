@@ -27,45 +27,46 @@ class ValutatorMod(loader.Module):
             bot_send_message = await message.client.send_message(chat, format(state))
             
             # Ждём ответа от бота (максимум 30 секунд)
-            async def wait_for_response():
-                try:
-                    async for event in message.client.iter_messages(chat, limit=1, reverse=True):
-                        if event.id > bot_send_message.id:
-                            return event
-                    
-                    # Если не нашли сообщение выше, ждём новое
-                    async for event in message.client.iter_messages(chat, limit=1):
-                        if event.id > bot_send_message.id:
-                            return event
-                    
-                    return None
-                except Exception:
-                    return None
+            bot_response = None
+            response_received = asyncio.Event()
+            chat_entity = await message.client.get_entity(chat)
+            my_id = (await message.client.get_me()).id
             
-            # Ждём ответа с таймаутом
+            async def message_handler(event):
+                nonlocal bot_response
+                if (event.chat_id == chat_entity.id and 
+                    event.sender_id != my_id and
+                    event.id > bot_send_message.id and
+                    not response_received.is_set()):
+                    bot_response = event
+                    response_received.set()
+            
+            # Регистрируем обработчик событий
+            message.client.add_event_handler(message_handler, events.NewMessage)
+            
             try:
-                bot_response = await asyncio.wait_for(wait_for_response(), timeout=30.0)
-                if bot_response:
-                    # Удаляем временное сообщение
-                    await temp_msg.delete()
-                    # Удаляем сообщение с командой
-                    await message.delete()
-                    # Отправляем новое сообщение с ответом от бота
-                    await message.respond(bot_response.text)
-                else:
-                    # Удаляем временное сообщение
-                    await temp_msg.delete()
-                    # Удаляем сообщение с командой
-                    await message.delete()
-                    # Отправляем сообщение об ошибке
-                    await message.respond("<b>Не удалось получить ответ от бота</b>")
+                # Ждём ответа с таймаутом
+                await asyncio.wait_for(response_received.wait(), timeout=30.0)
             except asyncio.TimeoutError:
+                pass
+            finally:
+                # Удаляем обработчик событий
+                message.client.remove_event_handler(message_handler, events.NewMessage)
+            
+            if bot_response:
                 # Удаляем временное сообщение
                 await temp_msg.delete()
                 # Удаляем сообщение с командой
                 await message.delete()
-                # Отправляем сообщение о таймауте
-                await message.respond("<b>Таймаут ожидания ответа от бота</b>")
+                # Отправляем новое сообщение с ответом от бота
+                await message.respond(bot_response.text)
+            else:
+                # Удаляем временное сообщение
+                await temp_msg.delete()
+                # Удаляем сообщение с командой
+                await message.delete()
+                # Отправляем сообщение об ошибке
+                await message.respond("<b>Не удалось получить ответ от бота</b>")
                 
         except YouBlockedUserError:
             # Удаляем временное сообщение
