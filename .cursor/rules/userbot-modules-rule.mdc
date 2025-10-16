@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+Always answer in Russian
+Use Context7 MCP Server for documentation for any framework or lib
+Use telegram-mcp for interacting with telegram (mostly working in heroku-logs chat) You can freely use all functions that can do regular user in telegram using mcp server.
+When you ended work with code with userbot module, send file of module to heroku-logs, and then reply to this file with .lm for loading this module in  userbot, if you added any functional that you can check without human, check it! But dont test buttons. If you failed with tool use, try use it again. If files is not an userbot module, dont do it. Module has class class exampleMod(loader.Module):
+If userbot not responding after a command try testing it with sending .p message, if message redacted and shoed ping then userbot working, if not redacted - not working.
+When creating userbot modules, always use the simple header format: "# meta developer: Azu-nyyyyyyaaaaan" and "# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/" at the beginning, keep code simple and minimal, avoid complex dictionaries and long code blocks.
