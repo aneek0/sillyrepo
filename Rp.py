@@ -3,15 +3,9 @@
 
 from .. import loader, utils
 import aiohttp
-from bs4 import BeautifulSoup
 import re
-import requests
-from io import BytesIO
-from datetime import datetime
-import time
-
-# Импортируем библиотеку для работы с PDF
 import fitz  # pymupdf
+from bs4 import BeautifulSoup
 
 @loader.tds
 class Rp(loader.Module):
@@ -27,10 +21,7 @@ class Rp(loader.Module):
     }
     
     def __init__(self):
-        # Кеш для HTTP сессий
-        self._session_cache = {}
-        self._last_cleanup = time.time()
-        self._cache_ttl = 300  # 5 минут
+        pass
     
     # Константы для регулярных выражений
     DATE_PATTERN = re.compile(r"\d{2}\s[а-яА-Я]+\s2025г\.")
@@ -76,83 +67,17 @@ class Rp(loader.Module):
         """Возвращает расписание звонков"""
         return self.monday_pair_times if is_monday else self.regular_pair_times
 
-    def _get_optimized_session(self, is_async=True):
-        """Получает оптимизированную HTTP сессию с кешированием"""
-        current_time = time.time()
-        
-        # Очищаем старые сессии
-        if current_time - self._last_cleanup > self._cache_ttl:
-            self._session_cache.clear()
-            self._last_cleanup = current_time
-        
-        session_key = f"async_{is_async}"
-        
-        if session_key not in self._session_cache:
-            if is_async:
-                # Оптимизированная aiohttp сессия
-                connector = aiohttp.TCPConnector(
-                    limit=10,  # Максимум соединений
-                    limit_per_host=5,  # Максимум соединений на хост
-                    keepalive_timeout=30,  # Keep-alive
-                    enable_cleanup_closed=True
-                )
-                timeout = aiohttp.ClientTimeout(
-                    total=10,  # Общий таймаут
-                    connect=5,  # Таймаут подключения
-                    sock_read=5  # Таймаут чтения
-                )
-                self._session_cache[session_key] = aiohttp.ClientSession(
-                    connector=connector,
-                    timeout=timeout,
-                    headers={
-                        'User-Agent': 'Mozilla/5.0 (compatible; ScheduleBot/1.0)',
-                        'Accept-Encoding': 'gzip, deflate',  # Сжатие
-                        'Connection': 'keep-alive'
-                    }
-                )
-            else:
-                # Оптимизированная requests сессия
-                session = requests.Session()
-                session.headers.update({
-                    'User-Agent': 'Mozilla/5.0 (compatible; ScheduleBot/1.0)',
-                    'Accept-Encoding': 'gzip, deflate',
-                    'Connection': 'keep-alive'
-                })
-                # Настройка адаптера для переиспользования соединений
-                adapter = requests.adapters.HTTPAdapter(
-                    pool_connections=5,
-                    pool_maxsize=10,
-                    max_retries=2
-                )
-                session.mount('http://', adapter)
-                session.mount('https://', adapter)
-                self._session_cache[session_key] = session
-        
-        return self._session_cache[session_key]
-
-    async def _cleanup_sessions(self):
-        """Очищает HTTP сессии"""
-        for session in self._session_cache.values():
-            if hasattr(session, 'close'):
-                if hasattr(session, '__aenter__'):  # aiohttp session
-                    await session.close()
-                else:  # requests session
-                    session.close()
-        self._session_cache.clear()
-
     async def rpcmd(self, message):
         """Команда .rp - получает расписание для группы 2-ОТС-1"""
         await utils.answer(message, self.strings["loading"])
 
         try:
-            # Используем оптимизированную сессию
-            session = self._get_optimized_session(is_async=True)
-            
-            async with session.get("https://novkrp.ru/raspisanie.htm") as resp:
-                if resp.status != 200:
-                    await utils.answer(message, self.strings["no_schedule"])
-                    return
-                html = await resp.text()
+            async with aiohttp.ClientSession() as session:
+                async with session.get("https://novkrp.ru/raspisanie.htm") as resp:
+                    if resp.status != 200:
+                        await utils.answer(message, self.strings["no_schedule"])
+                        return
+                    html = await resp.text()
 
             soup = BeautifulSoup(html, "html.parser")
             
@@ -256,47 +181,41 @@ class Rp(loader.Module):
         """Извлекает текст из PDF файла используя pymupdf"""
         pdf_url = "https://www.novkrp.ru/data/covid_pit.pdf"
         
-        # Используем оптимизированную сессию
-        session = self._get_optimized_session(is_async=False)
-        
         try:
-            response = session.get(pdf_url, stream=True)
-            response.raise_for_status()
+            async with aiohttp.ClientSession() as session:
+                async with session.get(pdf_url) as response:
+                    response.raise_for_status()
+                    
+                    # Проверяем размер файла по заголовку Content-Length
+                    content_length = response.headers.get('content-length')
+                    if content_length and int(content_length) > 10 * 1024 * 1024:  # 10 МБ
+                        raise Exception("PDF слишком большой (>10 МБ)")
+                    
+                    # Читаем содержимое
+                    content_data = await response.read()
+                    if len(content_data) > 10 * 1024 * 1024:  # 10 МБ
+                        raise Exception("PDF слишком большой (>10 МБ)")
+                    
+                    # Используем pymupdf для извлечения текста
+                    try:
+                        pdf_document = fitz.open(stream=content_data, filetype="pdf")
+                        full_text = ""
+                        
+                        # Извлекаем текст со всех страниц
+                        for page_num in range(pdf_document.page_count):
+                            page = pdf_document[page_num]
+                            text = page.get_text()
+                            if text:
+                                full_text += text + "\n"
+                        
+                        pdf_document.close()
+                        return full_text.strip()
+                        
+                    except Exception as e:
+                        raise Exception(f"Ошибка pymupdf: {str(e)}")
             
-            # Проверяем размер файла по заголовку Content-Length
-            content_length = response.headers.get('content-length')
-            if content_length and int(content_length) > 10 * 1024 * 1024:  # 10 МБ
-                raise Exception("PDF слишком большой (>10 МБ)")
-            
-            # Читаем содержимое по частям для экономии памяти
-            content = BytesIO()
-            for chunk in response.iter_content(chunk_size=8192):
-                content.write(chunk)
-                if content.tell() > 10 * 1024 * 1024:  # 10 МБ
-                    raise Exception("PDF слишком большой (>10 МБ)")
-            
-            content.seek(0)
-            
-            # Используем pymupdf для извлечения текста
-            try:
-                pdf_document = fitz.open(stream=content.read(), filetype="pdf")
-                full_text = ""
-                
-                # Извлекаем текст со всех страниц
-                for page_num in range(pdf_document.page_count):
-                    page = pdf_document[page_num]
-                    text = page.get_text()
-                    if text:
-                        full_text += text + "\n"
-                
-                pdf_document.close()
-                return full_text.strip()
-                
-            except Exception as e:
-                raise Exception(f"Ошибка pymupdf: {str(e)}")
-            
-        finally:
-            response.close()
+        except Exception as e:
+            raise Exception(f"Ошибка загрузки PDF: {str(e)}")
 
     def _find_group_schedule(self, full_text):
         """Ищет расписание для группы 2-ОТС-1"""
@@ -360,7 +279,6 @@ class Rp(loader.Module):
         """Форматирует результат расписания столовой"""
         result_parts = [
             "<b>🍽 Расписание столовой для группы 2-ОТС-1:</b>\n",
-            f"📅 На {datetime.now().strftime('%d.%m.%Y')}\n",
             f"⏰ {number}. {time}"
         ]
         
@@ -370,7 +288,3 @@ class Rp(loader.Module):
                 result_parts.append(f"👥 {clean_groups}")
         
         return "\n".join(result_parts)
-
-    async def on_unload(self):
-        """Очищает ресурсы при выгрузке модуля"""
-        await self._cleanup_sessions()
