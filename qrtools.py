@@ -1,80 +1,122 @@
+# meta developer: Azu-nyyyyyyaaaaan
+# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
+
+import aiohttp
+import qrcode
+from io import BytesIO
+from PIL import Image
 from .. import loader, utils
 from telethon.tl.types import DocumentAttributeFilename
-from requests import get, post
-from PIL import Image
-from io import BytesIO
+
 
 @loader.tds
 class QRtoolsMod(loader.Module):
-	"""Generator and reader of QR codes"""
-	strings = {"name": "QR tool's"}
-	@loader.owner
-	async def makeqrcmd(self, message):
-		""".makeqr <text or reply>"""
-		text = utils.get_args_raw(message)
-		reply = await message.get_reply_message()
-		file = False
-		if not text or text.lower() == ".file":
-			if text and text == ".file":
-				file = True
-			if not reply or not reply.message:
-				await message.edit("<b>Нет текста для кодирования!</b>")
-				return
-			text = reply.raw_text
-		else:
-			if text.startswith(".file"):
-				file = True
-				text = text[5:].strip()
-		url = "https://api.qrserver.com/v1/create-qr-code/?data={}&size=512x512&charset-source=UTF-8&charset-target=UTF-8&ecc=L&color=0-0-0&bgcolor=255-255-255&margin=1&qzone=1&format=png"
-		r = get(url.format(text), stream=True)
-		qrcode = BytesIO() 
-		qrcode.name = "qr.png" if file else "qr.webp"
-		Image.open(BytesIO(r.content)).save(qrcode)
-		qrcode.seek(0)
-		await message.delete()
-		await message.client.send_file(message.to_id, qrcode, reply_to=reply, force_document=file)
-		
-	@loader.owner
-	async def readqrcmd(self, message):
-		""".readqr <qrcode or reply to qrcode>"""
-		ok = await check(message)
-		if not ok:
-			reply = await message.get_reply_message()
-			ok = await check(reply)
-			if not ok:
-				text = "<b>Это не изображение!</b>" if reply else "<b>Нечего не передано!</b>"
-				await message.edit(text)
-				return
-		file = BytesIO()
-		file.name = "qr.png"
-		data = await message.client.download_file(ok)
-		Image.open(BytesIO(data)).save(file)
-		url = "https://api.qrserver.com/v1/read-qr-code/?outputformat=json"
-		resp = post(url, files={"file": file.getvalue()})
-		text = resp.json()[0]["symbol"][0]["data"]
-		if not text:
-			text = "<b>Невозможно распознать или QR пуст!<b>"
-		await utils.answer(message, text)
-		
-async def check(msg):
-	if msg and msg.media:
-		if msg.photo:
-			ok = msg.photo
-		elif msg.document:
-			if DocumentAttributeFilename(file_name='AnimatedSticker.tgs') in msg.media.document.attributes:
-				return False
-			if msg.gif or msg.video or msg.audio or msg.voice:
-				return False
-			ok = msg.media.document
-		else:
-			return False
-	else:
-		return False
-	if not ok or ok is None:
-		return False
-	else:
-		return ok
-		
-			
-				
-		
+    """QR код сканер и генератор"""
+    strings = {"name": "QRtools"}
+
+    @loader.owner
+    async def readqrcmd(self, message):
+        """.readqr <reply to image with QR code> - Сканирует QR код с изображения"""
+        reply = await message.get_reply_message()
+        
+        if not reply or not reply.media:
+            await utils.answer(message, "<b>❌ Ответьте на сообщение с изображением QR кода!</b>")
+            return
+            
+        # Проверяем, что это изображение
+        if not self._is_image(reply):
+            await utils.answer(message, "<b>❌ Это не изображение!</b>")
+            return
+            
+        try:
+            # Скачиваем изображение
+            file_data = await message.client.download_file(reply.media)
+            
+            # Создаем BytesIO объект для изображения
+            image_buffer = BytesIO(file_data)
+            image = Image.open(image_buffer)
+            
+            # Используем онлайн API для распознавания QR кода
+            async with aiohttp.ClientSession() as session:
+                # Подготавливаем файл для отправки
+                image_buffer.seek(0)
+                form_data = aiohttp.FormData()
+                form_data.add_field('file', image_buffer, filename='qr.png', content_type='image/png')
+                
+                async with session.post('https://api.qrserver.com/v1/read-qr-code/', data=form_data) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        
+                        if result and len(result) > 0 and 'symbol' in result[0]:
+                            qr_text = result[0]['symbol'][0]['data']
+                            if qr_text:
+                                await utils.answer(message, f"<b>📱 QR код содержит:</b>\n<code>{qr_text}</code>")
+                            else:
+                                await utils.answer(message, "<b>❌ Не удалось распознать QR код или он пустой!</b>")
+                        else:
+                            await utils.answer(message, "<b>❌ QR код не найден на изображении!</b>")
+                    else:
+                        await utils.answer(message, "<b>❌ Ошибка при распознавании QR кода!</b>")
+                        
+        except Exception as e:
+            await utils.answer(message, f"<b>❌ Ошибка: {str(e)}</b>")
+
+    @loader.owner
+    async def makeqrcmd(self, message):
+        """.makeqr <text> - Создает QR код из текста"""
+        text = utils.get_args_raw(message)
+        
+        if not text:
+            await utils.answer(message, "<b>❌ Укажите текст для создания QR кода!</b>")
+            return
+            
+        try:
+            # Создаем QR код
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(text)
+            qr.make(fit=True)
+            
+            # Создаем изображение
+            img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Конвертируем в BytesIO
+            buffer = BytesIO()
+            img.save(buffer, format='PNG')
+            buffer.seek(0)
+            buffer.name = "qr_code.png"
+            
+            # Отправляем как изображение
+            await message.delete()
+            await message.client.send_file(
+                message.to_id, 
+                buffer, 
+                caption=f"<b>📱 QR код для:</b> <code>{text}</code>",
+                force_document=False
+            )
+            
+        except Exception as e:
+            await utils.answer(message, f"<b>❌ Ошибка при создании QR кода: {str(e)}</b>")
+
+    def _is_image(self, message):
+        """Проверяет, является ли сообщение изображением"""
+        if not message or not message.media:
+            return False
+            
+        if message.photo:
+            return True
+            
+        if message.document:
+            # Проверяем, что это не анимированный стикер
+            if DocumentAttributeFilename(file_name='AnimatedSticker.tgs') in message.media.document.attributes:
+                return False
+            # Проверяем, что это не видео/аудио/гиф
+            if message.gif or message.video or message.audio or message.voice:
+                return False
+            return True
+            
+        return False

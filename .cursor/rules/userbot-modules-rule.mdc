@@ -6,7 +6,7 @@ Use Context7 MCP Server for documentation for any framework or lib
 Use telegram-mcp for interacting with telegram (mostly working in heroku-logs chat) You can freely use all functions that can do regular user in telegram using mcp server.
 
 ## 🚨 CRITICALLY IMPORTANT - Module Loading
-When you ended work with code with userbot module, send file of module to heroku-logs, and then reply to module file with .lm for loading this module in userbot, if you added any functional that you can check without human, check it! But dont test inline-buttons. If you failed with tool use, try use it again. If files is not an userbot module, dont do it. Module has class class exampleMod(loader.Module):
+When you ended work with code with userbot module, send file of module to heroku-logs, and then reply to module file with .lm for loading this module in userbot, if you added any functional that you can check without human, check it! If u creat any command, test it. If you need human for checking, talk to him. But dont test inline-buttons. If you failed with tool use, try use it again. If files is not an userbot module, dont do it. Module has class class exampleMod(loader.Module):
 
 **MUST reply to the module file with .lm command, NOT send the command separately!**
 

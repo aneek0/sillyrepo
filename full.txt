@@ -36,6 +36,7 @@ MyUsernames
 NekosLife
 Onlysqapi
 Pinger
+qrtools
 Rename
 RndNsfw
 Rp
