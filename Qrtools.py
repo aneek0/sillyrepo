@@ -50,7 +50,7 @@ class QRtoolsMod(loader.Module):
                         if result and len(result) > 0 and 'symbol' in result[0]:
                             qr_text = result[0]['symbol'][0]['data']
                             if qr_text:
-                                await utils.answer(message, f"<b>📱 QR код содержит:</b>\n<code>{qr_text}</code>")
+                                await utils.answer(message, f"<b>📱 QR код содержит:</b>\n{qr_text}")
                             else:
                                 await utils.answer(message, "<b>❌ Не удалось распознать QR код или он пустой!</b>")
                         else:
@@ -95,7 +95,7 @@ class QRtoolsMod(loader.Module):
             await message.client.send_file(
                 message.to_id, 
                 buffer, 
-                caption=f"<b>📱 QR код для:</b> <code>{text}</code>",
+                caption=f"<b>📱 QR код для:</b> {text}",
                 force_document=False
             )
             
