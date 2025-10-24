@@ -21,7 +21,7 @@ class UploaderMod(loader.Module):
         "catbox": ("https://catbox.moe/user/api.php", "fileToUpload", {"reqtype": "fileupload"}),
         "oxo": ("https://0x0.st", "file"),
         "kappa": ("https://kappa.lol/api/upload", "file", None, True),
-        "aneeko": ("https://aneeko.online", "file"),
+        "aneeko": ("https://rp.aneeko.online", "file"),
     }
 
     async def get_file(self, message: Message):
@@ -80,5 +80,5 @@ class UploaderMod(loader.Module):
         await self.handle_upload(message, "kappa")
 
     async def aneekocmd(self, message: Message):
-        """Загрузить файл на aneeko.online"""
+        """Загрузить файл на rp.aneeko.online"""
         await self.handle_upload(message, "aneeko")
