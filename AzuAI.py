@@ -53,7 +53,7 @@ class AzuAI(loader.Module):
             "DEFAULT_PROVIDER", 1, "Провайдер по умолчанию: 1 - Gemini, 2 - OpenRouter, 3 - OnlySq",
             "ONLYSQ_IMAGE_MODEL", "kandinsky", "Модель OnlySq для генерации изображений" # New config
         )
-        self.selected_models = {"gemini": "gemini-2.5-flash-preview-05-20", "openrouter": "meta-llama/llama-3.1-8b-instruct:free", "onlysq": "o3-mini"} # Updated default model for OnlySq
+        self.selected_models = {"gemini": "gemini-2.5-flash-preview-09-2025", "openrouter": "meta-llama/llama-3.1-8b-instruct:free", "onlysq": "o3-mini"} # Updated default model for OnlySq
         self.model_lists = {"gemini": [], "openrouter": [], "onlysq": []} # Add OnlySq to model lists
         self.chat_contexts = {} # Словарь для хранения состояния контекста по чатам
         self.chat_histories = {} # Словарь для хранения истории диалогов по чатам
