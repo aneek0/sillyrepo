@@ -40,6 +40,7 @@ Qrtools
 Rename
 RndNsfw
 Rp
+RpG
 ScheduledMessages
 Scrs
 Spam
