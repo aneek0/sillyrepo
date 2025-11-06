@@ -4,7 +4,15 @@
 from .. import loader, utils
 import aiohttp
 import re
-import fitz  # pymupdf
+import os
+import tempfile
+try:
+    import pymupdf
+except ImportError:
+    try:
+        import fitz as pymupdf
+    except ImportError:
+        raise ImportError("Не установлен pymupdf. Установите: pip install pymupdf")
 from bs4 import BeautifulSoup
 
 @loader.tds
@@ -21,7 +29,13 @@ class Rp(loader.Module):
     }
     
     def __init__(self):
-        pass
+        # Создаем директорию static, если её нет
+        static_dir = "/root/Heroku/static"
+        if not os.path.exists(static_dir):
+            try:
+                os.makedirs(static_dir, exist_ok=True)
+            except Exception:
+                pass  # Игнорируем ошибки создания директории
     
     # Константы для регулярных выражений
     DATE_PATTERN = re.compile(r"\d{2}\s[а-яА-Я]+\s2025г\.")
@@ -198,7 +212,19 @@ class Rp(loader.Module):
                     
                     # Используем pymupdf для извлечения текста
                     try:
-                        pdf_document = fitz.open(stream=content_data, filetype="pdf")
+                        # Пробуем открыть PDF из байтов
+                        pdf_document = None
+                        tmp_path = None
+                        try:
+                            # Пробуем открыть напрямую из байтов
+                            pdf_document = pymupdf.open(stream=content_data, filetype="pdf")
+                        except (AttributeError, TypeError, Exception):
+                            # Если не работает, сохраняем во временный файл
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                                tmp_file.write(content_data)
+                                tmp_path = tmp_file.name
+                            pdf_document = pymupdf.open(tmp_path)
+                        
                         full_text = ""
                         
                         # Извлекаем текст со всех страниц
@@ -209,9 +235,23 @@ class Rp(loader.Module):
                                 full_text += text + "\n"
                         
                         pdf_document.close()
+                        
+                        # Удаляем временный файл, если он был создан
+                        if tmp_path and os.path.exists(tmp_path):
+                            try:
+                                os.unlink(tmp_path)
+                            except Exception:
+                                pass
+                        
                         return full_text.strip()
                         
                     except Exception as e:
+                        # Удаляем временный файл в случае ошибки
+                        if tmp_path and os.path.exists(tmp_path):
+                            try:
+                                os.unlink(tmp_path)
+                            except Exception:
+                                pass
                         raise Exception(f"Ошибка pymupdf: {str(e)}")
             
         except Exception as e:
