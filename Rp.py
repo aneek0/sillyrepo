@@ -6,13 +6,44 @@ import aiohttp
 import re
 import os
 import tempfile
+# Импортируем pymupdf правильно
+# Сначала пробуем импортировать pymupdf напрямую
+_pymupdf_module = None
 try:
     import pymupdf
+    _pymupdf_module = pymupdf
 except ImportError:
+    pass
+
+# Если pymupdf не найден, пробуем через fitz (для обратной совместимости)
+if _pymupdf_module is None:
     try:
-        import fitz as pymupdf
+        import fitz
+        # Проверяем, что это действительно PyMuPDF - пробуем вызвать метод open
+        try:
+            # Пробуем проверить наличие метода open через вызов на тестовом пути
+            # Если это старый fitz, то open не будет вызываемым или не будет существовать
+            if hasattr(fitz, 'open'):
+                # Проверяем, что это функция/метод, а не просто атрибут
+                import inspect
+                if inspect.isfunction(fitz.open) or inspect.ismethod(fitz.open) or callable(fitz.open):
+                    _pymupdf_module = fitz
+                else:
+                    raise ImportError("Установлен старый пакет fitz. Удалите его: pip uninstall fitz && pip install pymupdf")
+            elif hasattr(fitz, 'Document'):
+                _pymupdf_module = fitz
+            else:
+                raise ImportError("Установлен старый пакет fitz без метода open. Удалите его: pip uninstall fitz && pip install pymupdf")
+        except Exception:
+            raise ImportError("Установлен старый пакет fitz. Удалите его: pip uninstall fitz && pip install pymupdf")
     except ImportError:
         raise ImportError("Не установлен pymupdf. Установите: pip install pymupdf")
+
+# Финальная проверка модуля
+if _pymupdf_module is None:
+    raise ImportError("Не удалось загрузить pymupdf. Установите: pip install pymupdf")
+
+pymupdf = _pymupdf_module
 from bs4 import BeautifulSoup
 
 @loader.tds
@@ -211,19 +242,33 @@ class Rp(loader.Module):
                         raise Exception("PDF слишком большой (>10 МБ)")
                     
                     # Используем pymupdf для извлечения текста
+                    # Всегда используем временный файл для надежности
+                    pdf_document = None
+                    tmp_path = None
                     try:
-                        # Пробуем открыть PDF из байтов
-                        pdf_document = None
-                        tmp_path = None
+                        # Сохраняем PDF во временный файл
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                            tmp_file.write(content_data)
+                            tmp_path = tmp_file.name
+                        
+                        # Открываем PDF из файла (более надежный способ)
+                        # Пробуем разные способы открытия
                         try:
-                            # Пробуем открыть напрямую из байтов
-                            pdf_document = pymupdf.open(stream=content_data, filetype="pdf")
-                        except (AttributeError, TypeError, Exception):
-                            # Если не работает, сохраняем во временный файл
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                                tmp_file.write(content_data)
-                                tmp_path = tmp_file.name
-                            pdf_document = pymupdf.open(tmp_path)
+                            # Пробуем использовать метод open
+                            if hasattr(pymupdf, 'open'):
+                                pdf_document = pymupdf.open(tmp_path)
+                            # Если open не работает, пробуем Document
+                            elif hasattr(pymupdf, 'Document'):
+                                pdf_document = pymupdf.Document(tmp_path)
+                            else:
+                                raise Exception("pymupdf не поддерживает открытие PDF файлов. Переустановите: pip uninstall fitz pymupdf && pip install pymupdf")
+                        except AttributeError as e:
+                            raise Exception(f"Ошибка: модуль fitz не имеет метода open. Удалите старый пакет fitz: pip uninstall fitz && pip install pymupdf. Детали: {str(e)}")
+                        except Exception as e:
+                            # Если это не AttributeError, пробрасываем дальше
+                            if "has no attribute 'open'" in str(e) or "module 'fitz' has no attribute 'open'" in str(e):
+                                raise Exception(f"Ошибка: установлен старый пакет fitz. Удалите его: pip uninstall fitz && pip install pymupdf")
+                            raise
                         
                         full_text = ""
                         
