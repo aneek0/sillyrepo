@@ -6,44 +6,7 @@ import aiohttp
 import re
 import os
 import tempfile
-# Импортируем pymupdf правильно
-# Сначала пробуем импортировать pymupdf напрямую
-_pymupdf_module = None
-try:
-    import pymupdf
-    _pymupdf_module = pymupdf
-except ImportError:
-    pass
-
-# Если pymupdf не найден, пробуем через fitz (для обратной совместимости)
-if _pymupdf_module is None:
-    try:
-        import fitz
-        # Проверяем, что это действительно PyMuPDF - пробуем вызвать метод open
-        try:
-            # Пробуем проверить наличие метода open через вызов на тестовом пути
-            # Если это старый fitz, то open не будет вызываемым или не будет существовать
-            if hasattr(fitz, 'open'):
-                # Проверяем, что это функция/метод, а не просто атрибут
-                import inspect
-                if inspect.isfunction(fitz.open) or inspect.ismethod(fitz.open) or callable(fitz.open):
-                    _pymupdf_module = fitz
-                else:
-                    raise ImportError("Установлен старый пакет fitz. Удалите его: pip uninstall fitz && pip install pymupdf")
-            elif hasattr(fitz, 'Document'):
-                _pymupdf_module = fitz
-            else:
-                raise ImportError("Установлен старый пакет fitz без метода open. Удалите его: pip uninstall fitz && pip install pymupdf")
-        except Exception:
-            raise ImportError("Установлен старый пакет fitz. Удалите его: pip uninstall fitz && pip install pymupdf")
-    except ImportError:
-        raise ImportError("Не установлен pymupdf. Установите: pip install pymupdf")
-
-# Финальная проверка модуля
-if _pymupdf_module is None:
-    raise ImportError("Не удалось загрузить pymupdf. Установите: pip install pymupdf")
-
-pymupdf = _pymupdf_module
+import pymupdf
 from bs4 import BeautifulSoup
 
 @loader.tds
@@ -60,6 +23,7 @@ class Rp(loader.Module):
     }
     
     def __init__(self):
+        super().__init__()
         # Создаем директорию static, если её нет
         static_dir = "/root/Heroku/static"
         if not os.path.exists(static_dir):
@@ -105,6 +69,9 @@ class Rp(loader.Module):
 
     def is_monday_schedule(self, date_text="", html_content=""):
         """Определяет, нужно ли показывать расписание звонков для понедельника"""
+        # Защита от None
+        date_text = date_text or ""
+        html_content = html_content or ""
         return any(keyword in (date_text + " " + html_content).lower() 
                   for keyword in ["понедельник", "monday"])
 
@@ -253,19 +220,18 @@ class Rp(loader.Module):
                         
                         # Открываем PDF из файла (более надежный способ)
                         # Пробуем разные способы открытия
+                        pdf_document = None
                         try:
-                            # Пробуем использовать метод open
-                            if hasattr(pymupdf, 'open'):
-                                pdf_document = pymupdf.open(tmp_path)
+                            # Пробуем использовать метод open напрямую
+                            pdf_document = pymupdf.open(tmp_path)
+                        except (AttributeError, TypeError) as e:
                             # Если open не работает, пробуем Document
-                            elif hasattr(pymupdf, 'Document'):
+                            try:
                                 pdf_document = pymupdf.Document(tmp_path)
-                            else:
-                                raise Exception("pymupdf не поддерживает открытие PDF файлов. Переустановите: pip uninstall fitz pymupdf && pip install pymupdf")
-                        except AttributeError as e:
-                            raise Exception(f"Ошибка: модуль fitz не имеет метода open. Удалите старый пакет fitz: pip uninstall fitz && pip install pymupdf. Детали: {str(e)}")
+                            except (AttributeError, TypeError):
+                                raise Exception(f"pymupdf не поддерживает открытие PDF файлов. Ошибка: {str(e)}")
                         except Exception as e:
-                            # Если это не AttributeError, пробрасываем дальше
+                            # Если это другая ошибка, пробрасываем дальше
                             if "has no attribute 'open'" in str(e) or "module 'fitz' has no attribute 'open'" in str(e):
                                 raise Exception(f"Ошибка: установлен старый пакет fitz. Удалите его: pip uninstall fitz && pip install pymupdf")
                             raise
