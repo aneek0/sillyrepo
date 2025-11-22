@@ -6,37 +6,10 @@ from .. import loader, utils
 from telethon import events
 import os
 import tempfile
-import asyncio # New import for sleep
-from openai import AsyncOpenAI # Changed import for OnlySq provider
-import base64 # Existing, ensure it's here for media handling
-import mimetypes # Existing, ensure it's here for media handling
-
-ONLYSQ_TEXT_MODELS = [
-    "gemini-2.5-flash-preview-04-17",
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-1.5-flash",
-    "gemini-1.5-flash-8b",
-    "command-a-03-2025",
-    "command-r7b-12-2024",
-    "command-r-plus-04-2024",
-    "command-r-plus",
-    "command-r-08-2024",
-    "command-r-03-2024",
-    "command-r",
-    "command",
-    "command-nightly",
-    "command-light",
-    "command-light-nightly",
-    "c4ai-aya-expanse-32b",
-    "gpt-4o-mini",
-    "gpt-4o",
-    "gpt-4",
-    "gpt-3.5-turbo",
-    "o3-mini",
-    "evil",
-    "mistral-small-3.1"
-]
+import asyncio
+from openai import AsyncOpenAI
+import base64
+import mimetypes
 
 @loader.tds
 class AzuAI(loader.Module):
@@ -49,12 +22,12 @@ class AzuAI(loader.Module):
         self.config = loader.ModuleConfig(
             "GEMINI_API_KEY", "", "API-ключ для Gemini AI",
             "OPENROUTER_API_KEY", "", "API-ключ для OpenRouter",
-            "ONLYSQ_API_KEY", "openai", "API-ключ для OnlySq (по умолчанию 'openai')", # Updated default value
+            "ONLYSQ_API_KEY", "openai", "API-ключ для OnlySq (по умолчанию 'openai')",
             "DEFAULT_PROVIDER", 1, "Провайдер по умолчанию: 1 - Gemini, 2 - OpenRouter, 3 - OnlySq",
-            "ONLYSQ_IMAGE_MODEL", "kandinsky", "Модель OnlySq для генерации изображений" # New config
+            "ONLYSQ_IMAGE_MODEL", "kandinsky", "Модель OnlySq для генерации изображений"
         )
-        self.selected_models = {"gemini": "gemini-2.5-flash-preview-09-2025", "openrouter": "meta-llama/llama-3.1-8b-instruct:free", "onlysq": "o3-mini"} # Updated default model for OnlySq
-        self.model_lists = {"gemini": [], "openrouter": [], "onlysq": []} # Add OnlySq to model lists
+        self.selected_models = {"gemini": "gemini-2.5-flash-preview-09-2025", "openrouter": "meta-llama/llama-3.1-8b-instruct:free", "onlysq": "o3-mini"}
+        self.model_lists = {"gemini": [], "openrouter": [], "onlysq": []}
         self.chat_contexts = {} # Словарь для хранения состояния контекста по чатам
         self.chat_histories = {} # Словарь для хранения истории диалогов по чатам
 
@@ -76,9 +49,8 @@ class AzuAI(loader.Module):
                     async with session.get(url) as response:
                         if response.status == 200:
                             data = await response.json()
-                            self.model_lists["gemini"] = [model["name"] for model in data.get("models", []) if "generateContent" in model["supportedGenerationMethods"]] # Filter for models that support generateContent
+                            self.model_lists["gemini"] = [model["name"] for model in data.get("models", []) if "generateContent" in model["supportedGenerationMethods"]]
                             print("Успешно получены модели Gemini")
-                            print(f"Тело ответа Gemini Models (status 200): {data}")
                         else:
                             error_text = await response.text()
                             print(f"Ошибка получения моделей Gemini. Статус: {response.status}, Ответ: {error_text[:200]}...")
@@ -105,12 +77,6 @@ class AzuAI(loader.Module):
                                 if model_id.startswith('google/') or model_id.startswith('deepseek/') or model_id.startswith('meta-llama/')
                             ]
                             print("Успешно получены все модели OpenRouter.")
-                            print(f"Общее количество моделей до фильтрации: {len(all_openrouter_models)}")
-                            print(f"Количество моделей OpenRouter после фильтрации: {len(self.model_lists['openrouter'])}")
-                            print("Список отфильтрованных моделей OpenRouter:")
-                            for model_id in self.model_lists["openrouter"]:
-                                print(f"- {model_id}")
-                            print(f"Тело ответа OpenRouter Models (status 200): {data}")
                         else:
                             error_text = await response.text()
                             print(f"Ошибка получения моделей OpenRouter. Статус: {response.status}, Ответ: {error_text}")
@@ -122,28 +88,28 @@ class AzuAI(loader.Module):
             print("API-ключ OpenRouter не установлен, пропуск получения моделей.")
             self.model_lists["openrouter"] = []
 
-        # OnlySq (используем предоставленный список моделей)
+        # OnlySq
         if self.config["ONLYSQ_API_KEY"]:
-            self.model_lists["onlysq"] = ONLYSQ_TEXT_MODELS # Directly assign the predefined list
-            print("Модели OnlySq загружены из предопределенного списка.")
-            print(f"Количество моделей OnlySq: {len(self.model_lists['onlysq'])}")
-            print("Список моделей OnlySq:")
-            for model_id in self.model_lists["onlysq"]:
-                print(f"- {model_id}")
+            url = "https://api.onlysq.ru/ai/models"
+            async with aiohttp.ClientSession() as session:
+                try:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            # Extract keys from the "models" dictionary
+                            self.model_lists["onlysq"] = list(data.get("models", {}).keys())
+                            print("Успешно получены модели OnlySq.")
+                            print(f"Количество моделей OnlySq: {len(self.model_lists['onlysq'])}")
+                        else:
+                            error_text = await response.text()
+                            print(f"Ошибка получения моделей OnlySq. Статус: {response.status}, Ответ: {error_text}")
+                            self.model_lists["onlysq"] = []
+                except Exception as e:
+                    print(f"Исключение при получении моделей OnlySq: {str(e)}")
+                    self.model_lists["onlysq"] = []
         else:
             print("API-ключ OnlySq не установлен, пропуск загрузки моделей.")
             self.model_lists["onlysq"] = []
-
-    def _create_model_buttons(self, service):
-        """Создать инлайн-кнопки для выбора модели"""
-        buttons = []
-        models = self.model_lists.get(service, [])
-        if not models:
-            return []
-        for model in models:
-            buttons.append([{"text": model, "callback": self._set_model, "args": (service, model)}])
-        buttons.append([{"text": "⬅️ Назад", "callback": self._back_to_services}])
-        return buttons
 
     async def aicfgcmd(self, message):
         """⚙️ Настроить провайдера и модель, установить API-ключи через конфигурацию модуля"""
@@ -178,7 +144,7 @@ class AzuAI(loader.Module):
             reply_markup = [
                 [get_provider_button(1, "Gemini")],
                 [get_provider_button(2, "OpenRouter")],
-                [get_provider_button(3, "OnlySq")], # New OnlySq button
+                [get_provider_button(3, "OnlySq")],
                 [{"text": "⬅️ Назад", "callback": self._show_settings_menu, "args": ("main",)}]
             ]
         elif menu_type == "models_service":
@@ -186,7 +152,7 @@ class AzuAI(loader.Module):
             reply_markup = [
                 [{"text": "Gemini", "callback": self._show_models, "args": ("gemini",)}],
                 [{"text": "OpenRouter", "callback": self._show_models, "args": ("openrouter",)}],
-                [{"text": "OnlySq", "callback": self._show_models, "args": ("onlysq",)}], # New OnlySq button
+                [{"text": "OnlySq", "callback": self._show_models, "args": ("onlysq",)}],
                 [{"text": "⬅️ Назад", "callback": self._show_settings_menu, "args": ("main",)}]
             ]
 
@@ -200,23 +166,59 @@ class AzuAI(loader.Module):
         elif provider_id == 2: provider_name = "OpenRouter"
         elif provider_id == 3: provider_name = "OnlySq"
         await call.edit(f"Провайдер по умолчанию установлен: {provider_name}")
-        await asyncio.sleep(1) # Добавляем небольшую задержку
-        await self._show_settings_menu(call, "providers") # Обновляем меню с индикатором
+        await asyncio.sleep(1)
+        await self._show_settings_menu(call, "providers")
 
-    async def _show_models(self, call, service):
+    async def _show_models(self, call, service, page=0):
         """Показать инлайн-кнопки для выбора модели"""
         models = self.model_lists.get(service, [])
         if not models:
             await call.edit(f"⚠️ <b>Нет доступных моделей для {service}.</b> Проверьте API-ключ и попробуйте снова.")
-            await self._show_settings_menu(call, "models_service") # Возвращаем пользователя в меню выбора сервиса
+            await self._show_settings_menu(call, "models_service")
             return
+
+        # Динамический расчет лимита для равномерного распределения по страницам
+        # Telegram лимит кнопок ~100. Берем 80 для безопасности.
+        MAX_BUTTONS = 80
+        total_models = len(models)
+        
+        if total_models <= MAX_BUTTONS:
+            limit = total_models
+        else:
+            # Если моделей больше лимита, делим на минимально возможное количество страниц
+            num_pages = (total_models + MAX_BUTTONS - 1) // MAX_BUTTONS
+            limit = (total_models + num_pages - 1) // num_pages
+            
+        if limit == 0: limit = 1
+
+        total_pages = (total_models + limit - 1) // limit
+        
+        if page < 0: page = 0
+        if page >= total_pages: page = total_pages - 1
+        
+        offset = page * limit
+        current_models = models[offset:offset + limit]
+
         buttons = []
         selected_model = self.selected_models.get(service)
-        for model in models:
+        for model in current_models:
             button_text = model
             if model == selected_model:
                 button_text += "🟣"
-            buttons.append([{"text": button_text, "callback": self._set_model, "args": (service, model)}])
+            buttons.append([{"text": button_text, "callback": self._set_model, "args": (service, model, page)}])
+        
+        nav = []
+        if total_pages > 1:
+            if page > 0:
+                nav.append({"text": "⬅️", "callback": self._show_models, "args": (service, page - 1)})
+            
+            nav.append({"text": f"{page + 1}/{total_pages}", "callback": self._show_models, "args": (service, page)})
+
+            if page < total_pages - 1:
+                nav.append({"text": "➡️", "callback": self._show_models, "args": (service, page + 1)})
+            
+            buttons.append(nav)
+
         buttons.append([
             {"text": "⬅️ Назад", "callback": self._show_settings_menu, "args": ("models_service",)}
         ])
@@ -225,29 +227,22 @@ class AzuAI(loader.Module):
             reply_markup=buttons
         )
 
-    async def _set_model(self, call, service, model):
+    async def _set_model(self, call, service, model, page=0):
         """Установить выбранную модель из инлайн-кнопки"""
         self.selected_models[service] = model
         await call.edit(f"✅ <b>Модель выбрана:</b> {model}")
-        await asyncio.sleep(1) # Добавляем небольшую задержку
-        await self._show_models(call, service) # Обновляем меню с индикатором
-
-    async def _back_to_aicfg(self, call):
-        # Эта функция больше не нужна, так как _show_settings_menu теперь обрабатывает навигацию назад
-        pass
+        await asyncio.sleep(1)
+        await self._show_models(call, service, page)
 
     async def askcmd(self, message):
         """Задать вопрос ИИ. Пример: .ask ваш вопрос или ответить на сообщение с .ask"""
         query = utils.get_args_raw(message).strip()
-        media_path = None # Инициализируем media_path здесь, чтобы она всегда была определена
+        media_path = None
 
-        # Проверяем, является ли сообщение ответом и загружаем медиа/текст из него, если есть
         if message.is_reply:
             try:
                 reply_message = await message.get_reply_message()
                 if reply_message:
-                    # Если есть текст в ответном сообщении, добавляем его к запросу, если запрос не пуст
-                    # или используем как основной запрос, если аргументы пустые
                     if reply_message.text:
                         if not query:
                             query = reply_message.text.strip()
@@ -255,7 +250,6 @@ class AzuAI(loader.Module):
                             query += "\n" + reply_message.text.strip()
 
                     if reply_message.photo or (reply_message.document and reply_message.document.mime_type and reply_message.document.mime_type.startswith('image/')):
-                        # Обрабатываем фото и документы, которые являются изображениями
                         processing_message = await utils.answer(message, "🧠 Обнаружено фото/изображение. Загрузка...")
                         try:
                             media_path = await reply_message.download_media(file=tempfile.gettempdir())
@@ -264,7 +258,6 @@ class AzuAI(loader.Module):
                             await utils.answer(message, f"Ошибка при загрузке изображения: {str(e)}")
                             return
                     elif reply_message.document:
-                        # Обрабатываем общие документы
                         mime_type = reply_message.document.mime_type
                         if mime_type and (mime_type.startswith('text/') or mime_type in ['application/json', 'application/xml', 'text/html', 'text/csv', 'application/javascript', 'application/x-sh', 'application/x-python']):
                             processing_message = await utils.answer(message, f"🧠 Обнаружен текстовый файл ({mime_type}). Загрузка и чтение...")
@@ -272,7 +265,7 @@ class AzuAI(loader.Module):
                                 temp_file_path = await reply_message.download_media(file=tempfile.gettempdir())
                                 with open(temp_file_path, 'r', encoding='utf-8') as f:
                                     file_content = f.read()
-                                os.remove(temp_file_path) # Удаляем временный файл
+                                os.remove(temp_file_path)
                                 if not query:
                                     query = file_content
                                 else:
@@ -282,13 +275,11 @@ class AzuAI(loader.Module):
                                 await utils.answer(message, f"Ошибка при загрузке или чтении файла: {str(e)}")
                                 return
                         else:
-                            # Для любых других типов документов (включая видео)
                             await utils.answer(message, f"Примечание: Прямая обработка файлов типа '{mime_type}' не поддерживается в текущей конфигурации. Будет обработан только текстовый запрос.")
                             try:
-                                # Попытка загрузить для очистки, но не использовать media_path для ИИ
                                 temp_file_to_cleanup = await reply_message.download_media(file=tempfile.gettempdir())
                                 os.remove(temp_file_to_cleanup)
-                            except Exception: # Игнорируем ошибки, если загрузка не удалась только для очистки
+                            except Exception:
                                 pass
             except Exception as e:
                 await utils.answer(message, f"Ошибка при получении текста из ответа или загрузке медиа: {str(e)}")
@@ -303,68 +294,43 @@ class AzuAI(loader.Module):
         elif self.config["DEFAULT_PROVIDER"] == 2: service = "openrouter"
         elif self.config["DEFAULT_PROVIDER"] == 3: service = "onlysq"
 
-        # Отправляем сообщение о начале обработки запроса
-        # processing_message = await utils.answer(message, "🧠 Обработка запроса...") # Закомментирована для предотвращения удаления сообщения
-
         chat_id = str(message.chat_id)
         is_context_enabled = self.chat_contexts.get(chat_id, False)
         history = self.chat_histories.get(chat_id, [])
 
         if is_context_enabled:
-            # Добавляем текущий запрос пользователя в историю для контекста
-            # Если есть и текст и медиа, добавляем только текст для истории, т.к. история чата текстовая
             if query:
                 history.append({"role": "user", "content": query})
                 self.chat_histories[chat_id] = history
 
-        # Логика поиска удалена, т.к. Gemini сам решает использовать ли Grounding (поиск)
-
-        ai_response_message = None
         if service == "gemini":
-            ai_response_message = await self._ask_gemini(message, query, history if is_context_enabled else [], media_path) # Передаем историю и медиафайл
+            await self._ask_gemini(message, query, history if is_context_enabled else [], media_path)
         elif service == "openrouter":
-            ai_response_message = await self._ask_openrouter(message, query, history if is_context_enabled else [], media_path) # Передаем историю и медиафайл
+            await self._ask_openrouter(message, query, history if is_context_enabled else [], media_path)
         elif service == "onlysq":
-            ai_response_message = await self._ask_onlysq(message, query, history if is_context_enabled else [], media_path) # New call for OnlySq
+            await self._ask_onlysq(message, query, history if is_context_enabled else [], media_path)
 
-        # Удаляем сообщение "Обработка запроса..."
-        # if processing_message:
-        #     await processing_message.delete() # Закомментирована для предотвращения удаления сообщения
-
-        # Удаляем временный медиафайл, если он был загружен
         if media_path and os.path.exists(media_path):
             os.remove(media_path)
 
-        # После ответа ИИ, если контекст включен, добавляем кнопку очистки диалога
-        # if is_context_enabled and ai_response_message:
-        #     await self.inline.form(
-        #         text=ai_response_message.text, # Используем текст ответа ИИ
-        #         message=ai_response_message, # Привязываем к сообщению с ответом ИИ
-        #         reply_markup=[[{"text": "🗑️ Очистить диалог", "callback": self._clear_chat_history_callback}]],
-        #         disable_security=True # Разрешаем без безопасности для работы с кнопками
-        #     )
-
-    async def _ask_gemini(self, message, query, history=[], media_path=None): # Добавляем history и media_path как аргументы
+    async def _ask_gemini(self, message, query, history=[], media_path=None):
         api_key = self.config["GEMINI_API_KEY"]
         if not api_key:
             await utils.answer(message, "API-ключ для Gemini не установлен. Используйте <code>.setkey {{gemini,openrouter,onlysq}} &lt;ваш_ключ&gt;</code>.")
             return
 
-        # Взаимодействие с Gemini API через HTTP с использованием Grounding
         model_id = self.selected_models['gemini'].replace('models/', '')
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={api_key}"
         headers = {"Content-Type": "application/json"}
 
-        # Формируем список сообщений для контекста
         contents = []
         for msg in history:
             contents.append({"role": msg["role"], "parts": [{"text": msg["content"]}]})
         
-        # Добавляем текущий запрос пользователя и медиафайл, если есть
         parts = []
         if query:
             parts.append({"text": query})
-        if media_path: # media_path будет содержать только путь к изображению
+        if media_path:
             try:
                 with open(media_path, "rb") as f:
                     encoded_media = base64.b64encode(f.read()).decode('utf-8')
@@ -373,7 +339,6 @@ class AzuAI(loader.Module):
                 if mime_type and mime_type.startswith('image/'):
                     parts.append({"inline_data": {"mime_type": mime_type, "data": encoded_media}})
                 else:
-                    # Этот случай не должен быть достигнут, если askcmd правильно фильтрует media_path
                     await utils.answer(message, "Неподдерживаемый тип медиафайла для Gemini (не изображение). Будет обработан только текст запроса.")
 
             except Exception as e:
@@ -388,11 +353,7 @@ class AzuAI(loader.Module):
 
         payload = {
             "contents": contents,
-            "tools": [
-                {
-                    "googleSearch": {} # Оставляем Grounding для автоматического поиска
-                }
-            ]
+            "tools": [{"googleSearch": {}}]
         }
 
         async with aiohttp.ClientSession() as session:
@@ -400,12 +361,10 @@ class AzuAI(loader.Module):
                 async with session.post(url, json=payload, headers=headers) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        # Отправляем ошибку новым сообщением
                         await utils.answer(message, f"Ошибка при получении ответа от Gemini (HTTP): Status {response.status}: {error_text[:200]}...")
                         return
                     data = await response.json()
 
-                    # Обработка ответа
                     if data and "candidates" in data and data["candidates"]:
                          answer_parts = []
                          for part in data["candidates"][0]["content"]["parts"]:
@@ -426,10 +385,9 @@ class AzuAI(loader.Module):
                                   await utils.answer(message, "Ошибка при получении ответа от Gemini (HTTP): Получен пустой ответ от API")
                          else:
                              await utils.answer(message, f"<b>Gemini ({self.selected_models['gemini']}):</b>\n{answer}")
-                             # Если контекст включен, добавляем ответ ИИ в историю
                              if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
                                 self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
-                                self.db.set(self.strings["name"], "chat_histories", self.chat_histories) # Сохраняем в БД
+                                self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
 
                     elif data and "promptFeedback" in data and data["promptFeedback"].get("blockReason"):
                          block_reason = data["promptFeedback"]["blockReason"]
@@ -440,7 +398,7 @@ class AzuAI(loader.Module):
             except Exception as e:
                 await utils.answer(message, f"Ошибка при получении ответа от Gemini (HTTP): {str(e)}")
 
-    async def _ask_openrouter(self, message, query, history=[], media_path=None): # Добавляем history и media_path как аргументы
+    async def _ask_openrouter(self, message, query, history=[], media_path=None):
         api_key = self.config["OPENROUTER_API_KEY"]
         if not api_key:
             await utils.answer(message, "API-ключ для OpenRouter не установлен. Используйте <code>.setkey {{gemini,openrouter,onlysq}} &lt;ваш_ключ&gt;</code>.")
@@ -451,14 +409,10 @@ class AzuAI(loader.Module):
             "Content-Type": "application/json"
         }
 
-        # Формируем список сообщений для контекста
         messages = []
         for msg in history:
             messages.append({"role": msg["role"], "content": msg["content"]})
         
-        # OpenRouter не поддерживает мультимодальный ввод из коробки через свой `/chat/completions` API для всех моделей.
-        # Некоторые модели могут иметь специфическую поддержку или требовать другой эндпоинт.
-        # Пока что, если есть медиа, мы просто сообщим, что его обработка для OpenRouter ограничена.
         if media_path:
             await utils.answer(message, "Примечание: OpenRouter в настоящее время не поддерживает прямую мультимодальную обработку изображений/видео через текущий API. Будет обработан только текст запроса.")
 
@@ -478,14 +432,13 @@ class AzuAI(loader.Module):
                     data = await response.json()
                     answer = data["choices"][0]["message"]["content"]
                     await utils.answer(message, f"<b>OpenRouter ({self.selected_models['openrouter']}):</b>\n{answer}")
-                    # Если контекст включен, добавляем ответ ИИ в историю
                     if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
                         self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
-                        self.db.set(self.strings["name"], "chat_histories", self.chat_histories) # Сохраняем в БД
+                        self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
             except Exception as e:
                 await utils.answer(message, f"Ошибка при получении ответа от OpenRouter: {str(e)}")
 
-    async def _ask_onlysq(self, message, query, history=[], media_path=None): # New function for OnlySq
+    async def _ask_onlysq(self, message, query, history=[], media_path=None):
         api_key = self.config["ONLYSQ_API_KEY"]
         if not api_key:
             await utils.answer(message, "API-ключ для OnlySq не установлен. Используйте <code>.setkey {{gemini,openrouter,onlysq}} &lt;ваш_ключ&gt;</code>.")
@@ -504,7 +457,7 @@ class AzuAI(loader.Module):
         if query:
             content_parts.append({"type": "text", "text": query})
         
-        if media_path: # Check for image media
+        if media_path:
             try:
                 with open(media_path, "rb") as f:
                     encoded_media = base64.b64encode(f.read()).decode('utf-8')
@@ -532,7 +485,7 @@ class AzuAI(loader.Module):
             await utils.answer(message, f"<b>OnlySq ({self.selected_models['onlysq']}):</b>\n{answer}")
             if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
                 self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
-                self.db.set(self.strings["name"], "chat_histories", self.chat_histories) # Save to DB
+                self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
         except Exception as e:
             await utils.answer(message, f"Ошибка при получении ответа от OnlySq: {str(e)}")
 
@@ -540,10 +493,10 @@ class AzuAI(loader.Module):
         """Включает/выключает режим контекстного диалога."""
         chat_id = str(message.chat_id)
         if chat_id not in self.chat_contexts:
-            self.chat_contexts[chat_id] = False # По умолчанию выключен
+            self.chat_contexts[chat_id] = False
 
-        self.chat_contexts[chat_id] = not self.chat_contexts[chat_id] # Переключаем состояние
-        self.db.set(self.strings["name"], "chat_contexts", self.chat_contexts) # Сохраняем в БД
+        self.chat_contexts[chat_id] = not self.chat_contexts[chat_id]
+        self.db.set(self.strings["name"], "chat_contexts", self.chat_contexts)
 
         status = "включен" if self.chat_contexts[chat_id] else "выключен"
         await utils.answer(message, f"Режим контекстного диалога для этого чата {status}.")
@@ -558,16 +511,6 @@ class AzuAI(loader.Module):
         else:
             await utils.answer(message, "История диалога уже пуста.")
 
-    # async def _clear_chat_history_callback(self, call):
-    #     """Callback для очистки истории диалога."""
-    #     chat_id = str(call.chat_id)
-    #     if chat_id in self.chat_histories:
-    #         del self.chat_histories[chat_id]
-    #         self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
-    #         await call.edit("История диалога очищена.", reply_markup=None)
-    #     else:
-    #         await call.edit("История диалога уже пуста.", reply_markup=None)
-
     async def imgcmd(self, message):
         """Генерирует изображение с помощью OnlySq. Пример: .img ваш запрос"""
         query = utils.get_args_raw(message).strip()
@@ -575,7 +518,6 @@ class AzuAI(loader.Module):
             await utils.answer(message, "Пожалуйста, введите запрос для генерации изображения. Пример: <code>.img красивый закат на пляже</code>")
             return
 
-        # Отправляем сообщение о начале обработки запроса
         processing_message = await utils.answer(message, "🧠 Запрос на генерацию изображения отправлен...")
 
         image_path = await self._generate_image_onlysq(message, query)
@@ -603,7 +545,7 @@ class AzuAI(loader.Module):
         """Генерирует изображение с помощью OnlySq API."""
         api_key = self.config["ONLYSQ_API_KEY"]
         if not api_key:
-            api_key = "openai" # Use "openai" as default if key is empty
+            api_key = "openai"
 
         image_model = self.config["ONLYSQ_IMAGE_MODEL"]
         url = "https://api.onlysq.ru/ai/imagen"
@@ -612,9 +554,9 @@ class AzuAI(loader.Module):
         payload = {
             "model": image_model,
             "prompt": prompt,
-            "width": 1024, # Default width
-            "height": 1024, # Default height
-            "count": 1 # Number of images to generate
+            "width": 1024,
+            "height": 1024,
+            "count": 1
         }
 
         try:
@@ -627,11 +569,9 @@ class AzuAI(loader.Module):
                     
                     data = await response.json()
                     if data and "files" in data and data["files"]:
-                        # Get the first image from the list of files (base64 encoded)
                         encoded_image = data["files"][0]
                         decoded_image = base64.b64decode(encoded_image)
 
-                        # Save to a temporary file
                         temp_image_path = os.path.join(tempfile.gettempdir(), "generated_image.png")
                         with open(temp_image_path, "wb") as f:
                             f.write(decoded_image)
