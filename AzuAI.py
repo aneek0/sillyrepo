@@ -411,7 +411,8 @@ class AzuAI(loader.Module):
 
         messages = []
         for msg in history:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+            role = "assistant" if msg["role"] == "model" else msg["role"]
+            messages.append({"role": role, "content": msg["content"]})
         
         if media_path:
             await utils.answer(message, "Примечание: OpenRouter в настоящее время не поддерживает прямую мультимодальную обработку изображений/видео через текущий API. Будет обработан только текст запроса.")
@@ -451,7 +452,8 @@ class AzuAI(loader.Module):
 
         messages = []
         for msg in history:
-            messages.append({"role": msg["role"], "content": msg["content"]})
+            role = "assistant" if msg["role"] == "model" else msg["role"]
+            messages.append({"role": role, "content": msg["content"]})
 
         content_parts = []
         if query:
