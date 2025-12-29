@@ -12,10 +12,10 @@ class ValutatorMod(loader.Module):
         """<amount> <from> <to> - Convert currency"""
         args = utils.get_args_raw(message)
         if not args:
-            await utils.answer(message, "<b>Usage: .curr <amount> <from> <to></b>")
+            await utils.answer(message, "<b>Usage: .curr 10usd")
             return
 
-        message = await utils.answer(message, "<b>Converting...</b>")
+        message = await utils.answer(message, "<emoji document_id=5346192260029489215>💵</emoji> <b>Конвертирую...</b>")
         
         async with self._client.conversation("@aneekocurrency_bot") as conv:
             try:
