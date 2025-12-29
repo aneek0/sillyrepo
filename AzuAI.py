@@ -10,6 +10,7 @@ import asyncio
 from openai import AsyncOpenAI
 import base64
 import mimetypes
+import json
 
 @loader.tds
 class AzuAI(loader.Module):
@@ -23,10 +24,11 @@ class AzuAI(loader.Module):
             "GEMINI_API_KEY", "", "API-ключ для Gemini AI",
             "OPENROUTER_API_KEY", "", "API-ключ для OpenRouter",
             "ONLYSQ_API_KEY", "openai", "API-ключ для OnlySq (по умолчанию 'openai')",
+            "TAVILY_API_KEY", "", "API-ключ для Tavily (поиск в интернете)",
             "DEFAULT_PROVIDER", 1, "Провайдер по умолчанию: 1 - Gemini, 2 - OpenRouter, 3 - OnlySq",
             "ONLYSQ_IMAGE_MODEL", "kandinsky", "Модель OnlySq для генерации изображений"
         )
-        self.selected_models = {"gemini": "gemini-2.5-flash-preview-09-2025", "openrouter": "meta-llama/llama-3.1-8b-instruct:free", "onlysq": "o3-mini"}
+        self.selected_models = {"gemini": "gemini-2.5-flash-preview-09-2025", "openrouter": "meta-llama/llama-3.1-8b-instruct:free", "onlysq": "gemini-3-flash"}
         self.model_lists = {"gemini": [], "openrouter": [], "onlysq": []}
         self.chat_contexts = {} # Словарь для хранения состояния контекста по чатам
         self.chat_histories = {} # Словарь для хранения истории диалогов по чатам
@@ -419,25 +421,132 @@ class AzuAI(loader.Module):
 
         messages.append({"role": "user", "content": query})
 
+        # Определение tool для поиска через Tavily
+        tools = []
+        if self.config["TAVILY_API_KEY"]:
+            tools = [{
+                "type": "function",
+                "function": {
+                    "name": "search_internet",
+                    "description": "Поиск актуальной информации в интернете. Используй эту функцию, когда нужно найти свежую информацию, новости, факты или данные, которые могут измениться со временем.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Поисковый запрос для поиска в интернете"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            }]
+
         payload = {
             "model": self.selected_models["openrouter"],
             "messages": messages
         }
+        if tools:
+            payload["tools"] = tools
+            payload["tool_choice"] = "auto"
+
         async with aiohttp.ClientSession() as session:
             try:
-                async with session.post(url, json=payload, headers=headers) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        await utils.answer(message, f"Ошибка при получении ответа от OpenRouter: Status {response.status}: {error_text[:200]}...")
-                        return
-                    data = await response.json()
-                    answer = data["choices"][0]["message"]["content"]
-                    await utils.answer(message, f"<b>OpenRouter ({self.selected_models['openrouter']}):</b>\n{answer}")
-                    if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
-                        self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
-                        self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
+                max_iterations = 3
+                iteration = 0
+                
+                while iteration < max_iterations:
+                    async with session.post(url, json=payload, headers=headers) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            await utils.answer(message, f"Ошибка при получении ответа от OpenRouter: Status {response.status}: {error_text[:200]}...")
+                            return
+                        data = await response.json()
+                        
+                        message_data = data["choices"][0]["message"]
+                        
+                        # Проверяем, есть ли tool calls
+                        if "tool_calls" in message_data and message_data["tool_calls"]:
+                            # Добавляем ответ модели в историю
+                            messages.append(message_data)
+                            
+                            # Выполняем tool calls
+                            for tool_call in message_data["tool_calls"]:
+                                if tool_call["function"]["name"] == "search_internet":
+                                    args = json.loads(tool_call["function"]["arguments"])
+                                    search_query = args.get("query", query)
+                                    
+                                    search_results = await self._search_tavily(search_query)
+                                    if search_results:
+                                        messages.append({
+                                            "role": "tool",
+                                            "tool_call_id": tool_call["id"],
+                                            "content": f"Результаты поиска в интернете:\n\n{search_results}"
+                                        })
+                                    else:
+                                        messages.append({
+                                            "role": "tool",
+                                            "tool_call_id": tool_call["id"],
+                                            "content": "Не удалось найти информацию в интернете. Попробуй ответить на основе своих знаний."
+                                        })
+                            
+                            iteration += 1
+                            continue
+                        else:
+                            # Получен финальный ответ
+                            answer = message_data["content"]
+                            await utils.answer(message, f"<b>OpenRouter ({self.selected_models['openrouter']}):</b>\n{answer}")
+                            if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
+                                self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
+                                self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
+                            return
+                
+                # Если превышен лимит итераций, отправляем последний ответ
+                if messages:
+                    last_message = messages[-1]
+                    if "content" in last_message:
+                        await utils.answer(message, f"<b>OpenRouter ({self.selected_models['openrouter']}):</b>\n{last_message['content']}")
+                    else:
+                        await utils.answer(message, "Достигнут лимит итераций для обработки tool calls.")
+                        
             except Exception as e:
                 await utils.answer(message, f"Ошибка при получении ответа от OpenRouter: {str(e)}")
+
+    async def _search_tavily(self, query):
+        """Выполнить поиск в интернете через Tavily API"""
+        api_key = self.config["TAVILY_API_KEY"]
+        if not api_key:
+            return None
+        
+        url = "https://api.tavily.com/search"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "api_key": api_key,
+            "query": query,
+            "search_depth": "basic",
+            "max_results": 5
+        }
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        results = data.get("results", [])
+                        if results:
+                            search_summary = []
+                            for result in results:
+                                title = result.get("title", "Без названия")
+                                content = result.get("content", "")
+                                url_link = result.get("url", "")
+                                search_summary.append(f"**{title}**\n{content}\nИсточник: {url_link}\n")
+                            return "\n\n".join(search_summary)
+                        return None
+                    else:
+                        return None
+        except Exception as e:
+            print(f"Ошибка при поиске через Tavily: {str(e)}")
+            return None
 
     async def _ask_onlysq(self, message, query, history=[], media_path=None):
         api_key = self.config["ONLYSQ_API_KEY"]
@@ -478,16 +587,100 @@ class AzuAI(loader.Module):
 
         messages.append({"role": "user", "content": content_parts})
 
+        # Определение tool для поиска через Tavily
+        tools = []
+        if self.config["TAVILY_API_KEY"]:
+            tools = [{
+                "type": "function",
+                "function": {
+                    "name": "search_internet",
+                    "description": "Поиск актуальной информации в интернете. Используй эту функцию, когда нужно найти свежую информацию, новости, факты или данные, которые могут измениться со временем.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Поисковый запрос для поиска в интернете"
+                            }
+                        },
+                        "required": ["query"]
+                    }
+                }
+            }]
+
         try:
-            completion = await client.chat.completions.create(
-                model=self.selected_models["onlysq"],
-                messages=messages,
-            )
-            answer = completion.choices[0].message.content
-            await utils.answer(message, f"<b>OnlySq ({self.selected_models['onlysq']}):</b>\n{answer}")
-            if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
-                self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
-                self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
+            max_iterations = 3
+            iteration = 0
+            
+            while iteration < max_iterations:
+                completion_kwargs = {
+                    "model": self.selected_models["onlysq"],
+                    "messages": messages
+                }
+                if tools:
+                    completion_kwargs["tools"] = tools
+                    completion_kwargs["tool_choice"] = "auto"
+                
+                completion = await client.chat.completions.create(**completion_kwargs)
+                message_data = completion.choices[0].message
+                
+                # Проверяем, есть ли tool calls
+                if message_data.tool_calls:
+                    # Добавляем ответ модели в историю
+                    messages.append({
+                        "role": "assistant",
+                        "content": message_data.content,
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments
+                                }
+                            } for tc in message_data.tool_calls
+                        ]
+                    })
+                    
+                    # Выполняем tool calls
+                    for tool_call in message_data.tool_calls:
+                        if tool_call.function.name == "search_internet":
+                            args = json.loads(tool_call.function.arguments)
+                            search_query = args.get("query", query)
+                            
+                            search_results = await self._search_tavily(search_query)
+                            if search_results:
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": f"Результаты поиска в интернете:\n\n{search_results}"
+                                })
+                            else:
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": "Не удалось найти информацию в интернете. Попробуй ответить на основе своих знаний."
+                                })
+                    
+                    iteration += 1
+                    continue
+                else:
+                    # Получен финальный ответ
+                    answer = message_data.content
+                    await utils.answer(message, f"<b>OnlySq ({self.selected_models['onlysq']}):</b>\n{answer}")
+                    if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
+                        self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
+                        self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
+                    return
+            
+            # Если превышен лимит итераций, отправляем последний ответ
+            if messages:
+                last_message = messages[-1]
+                if isinstance(last_message, dict) and "content" in last_message:
+                    await utils.answer(message, f"<b>OnlySq ({self.selected_models['onlysq']}):</b>\n{last_message['content']}")
+                else:
+                    await utils.answer(message, "Достигнут лимит итераций для обработки tool calls.")
+                    
         except Exception as e:
             await utils.answer(message, f"Ошибка при получении ответа от OnlySq: {str(e)}")
 
