@@ -280,7 +280,7 @@ class AzuAI(loader.Module):
     def _get_service_name(self):
         """Получить имя сервиса по провайдеру"""
         provider_map = {1: "gemini", 2: "openrouter", 3: "onlysq"}
-        return provider_map.get(self.config["DEFAULT_PROVIDER"], "gemini")
+        return provider_map.get(self.config["DEFAULT_PROVIDER"], "onlysq")
 
     async def _extract_query_and_media(self, message):
         """Извлечь запрос и медиа из сообщения"""
