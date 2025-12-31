@@ -10,6 +10,17 @@ import asyncio
 from openai import AsyncOpenAI
 import base64
 import mimetypes
+import traceback
+
+MAX_BUTTONS_PER_PAGE = 8
+SUPPORTED_TEXT_MIMES = ['text/plain', 'text/html', 'text/css', 'text/javascript', 'application/json', 'application/x-python', 'text/x-python']
+
+SEARCH_KEYWORDS = {
+    "explicit": ["найти", "найди", "поиск", "search", "google", "гугл", "интернет", "web", "инфа", "инфу"],
+    "time": ["время", "час", "дата", "сегодня", "завтра", "вчера", "год", "месяц"],
+    "news": ["новости", "события", "произошло", "случилось", "news", "актуально"],
+    "questions": ["кто", "что", "где", "когда", "почему", "как", "сколько", "чей", "какой"]
+}
 
 @loader.tds
 class AzuAI(loader.Module):
@@ -72,8 +83,11 @@ class AzuAI(loader.Module):
                         error_text = await response.text()
                         print(f"Ошибка получения моделей Gemini. Статус: {response.status}, Ответ: {error_text[:200]}...")
                         self.model_lists["gemini"] = []
+        except aiohttp.ClientError as e:
+            print(f"Ошибка сети при получении моделей Gemini: {str(e)}")
+            self.model_lists["gemini"] = []
         except Exception as e:
-            print(f"Исключение при получении моделей Gemini: {str(e)}")
+            print(f"Непредвиденное исключение при получении моделей Gemini: {traceback.format_exc()}")
             self.model_lists["gemini"] = []
 
     async def _fetch_openrouter_models(self):
@@ -100,8 +114,11 @@ class AzuAI(loader.Module):
                         error_text = await response.text()
                         print(f"Ошибка получения моделей OpenRouter. Статус: {response.status}, Ответ: {error_text}")
                         self.model_lists["openrouter"] = []
+        except aiohttp.ClientError as e:
+            print(f"Ошибка сети при получении моделей OpenRouter: {str(e)}")
+            self.model_lists["openrouter"] = []
         except Exception as e:
-            print(f"Исключение при получении моделей OpenRouter: {str(e)}")
+            print(f"Непредвиденное исключение при получении моделей OpenRouter: {traceback.format_exc()}")
             self.model_lists["openrouter"] = []
 
     async def _fetch_onlysq_models(self):
@@ -123,8 +140,11 @@ class AzuAI(loader.Module):
                         error_text = await response.text()
                         print(f"Ошибка получения моделей OnlySq. Статус: {response.status}, Ответ: {error_text}")
                         self.model_lists["onlysq"] = []
+        except aiohttp.ClientError as e:
+            print(f"Ошибка сети при получении моделей OnlySq: {str(e)}")
+            self.model_lists["onlysq"] = []
         except Exception as e:
-            print(f"Исключение при получении моделей OnlySq: {str(e)}")
+            print(f"Непредвиденное исключение при получении моделей OnlySq: {traceback.format_exc()}")
             self.model_lists["onlysq"] = []
 
     # ========== Методы настройки ==========
@@ -320,6 +340,7 @@ class AzuAI(loader.Module):
                 media_path = None
 
         except Exception as e:
+            print(f"Ошибка в _extract_query_and_media: {traceback.format_exc()}")
             await utils.answer(message, f"Ошибка при получении текста из ответа или загрузке медиа: {str(e)}")
             return None, None
 
@@ -488,7 +509,10 @@ class AzuAI(loader.Module):
                         if chat_id in self.chat_contexts and self.chat_contexts[chat_id]:
                             user_content = self._get_user_content(query, media_path)
                             self._save_chat_history(chat_id, user_content, answer)
+        except aiohttp.ClientError as e:
+            await utils.answer(message, f"Ошибка сети при запросе к Gemini: {str(e)}")
         except Exception as e:
+            print(f"Критическая ошибка в _ask_gemini: {traceback.format_exc()}")
             await utils.answer(message, f"Ошибка при получении ответа от Gemini: {str(e)}")
 
     def _parse_gemini_response(self, data, message):
@@ -556,7 +580,10 @@ class AzuAI(loader.Module):
                     if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
                         self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
                         self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
+            except aiohttp.ClientError as e:
+                await utils.answer(message, f"Ошибка сети при запросе к OpenRouter: {str(e)}")
             except Exception as e:
+                print(f"Критическая ошибка в _ask_openrouter: {traceback.format_exc()}")
                 await utils.answer(message, f"Ошибка при получении ответа от OpenRouter: {str(e)}")
 
     async def _ask_onlysq(self, message, query, history, media_path, chat_id):
@@ -776,6 +803,10 @@ class AzuAI(loader.Module):
                     else:
                         await utils.answer(message, "Не удалось получить данные изображения от OnlySq.")
                         return None
+        except aiohttp.ClientError as e:
+            await utils.answer(message, f"Ошибка сети при запросе к OnlySq Imagen API: {str(e)}")
+            return None
         except Exception as e:
-            await utils.answer(message, f"Ошибка при запросе к OnlySq Imagen API: {str(e)}")
+            print(f"Критическая ошибка в _generate_image_onlysq: {traceback.format_exc()}")
+            await utils.answer(message, f"Непредвиденная ошибка при генерации изображения: {str(e)}")
             return None
