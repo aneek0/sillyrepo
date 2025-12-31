@@ -559,7 +559,7 @@ class AzuAI(loader.Module):
             except Exception as e:
                 await utils.answer(message, f"Ошибка при получении ответа от OpenRouter: {str(e)}")
 
-    async def _ask_onlysq(self, message, query, history=[], media_path=None):
+    async def _ask_onlysq(self, message, query, history, media_path, chat_id):
         api_key = self.config["ONLYSQ_API_KEY"]
         if not api_key:
             await utils.answer(message, "API-ключ для OnlySq не установлен.")
@@ -601,9 +601,42 @@ class AzuAI(loader.Module):
                 tools = self._create_search_tool()
 
         try:
-            answer = await self._process_onlysq_completion(
-                client, messages, tools, query, message, chat_id, media_path
+            # Inline processing instead of missing _process_onlysq_completion
+            completion = await client.chat.completions.create(
+                model=self.selected_models["onlysq"],
+                messages=messages,
+                tools=tools if tools else None
             )
+            
+            # Handle potential tool calls or direct content
+            response_message = completion.choices[0].message
+            if response_message.tool_calls and not is_gemini_model:
+                # Basic tool call handling (Tavily search)
+                tool_call = response_message.tool_calls[0]
+                if tool_call.function.name == "search_internet":
+                    import json
+                    args = json.loads(tool_call.function.arguments)
+                    search_results = await self._search_tavily(args.get("query"))
+                    if search_results:
+                        messages.append(response_message)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": "search_internet",
+                            "content": search_results
+                        })
+                        completion = await client.chat.completions.create(
+                            model=self.selected_models["onlysq"],
+                            messages=messages
+                        )
+                        answer = completion.choices[0].message.content
+                    else:
+                        answer = response_message.content
+                else:
+                    answer = response_message.content
+            else:
+                answer = response_message.content
+
             if answer:
                 await utils.answer(message, f"<b>OnlySq ({self.selected_models['onlysq']}):</b>\n{answer}")
                 if chat_id in self.chat_contexts and self.chat_contexts[chat_id]:
@@ -625,8 +658,8 @@ class AzuAI(loader.Module):
 
     async def _prepare_onlysq_messages(self, messages, query, media_path, message):
         """Подготовить сообщения для OnlySq"""
+        content_parts = []
         if media_path:
-            content_parts = []
             if query:
                 content_parts.append({"type": "text", "text": query})
             
@@ -645,26 +678,17 @@ class AzuAI(loader.Module):
                     return []
             except Exception as e:
                 await utils.answer(message, f"Ошибка при кодировании медиафайла для OnlySq: {str(e)}")
-                return
+                return []
 
-        if not content_parts:
+        if content_parts:
+            messages.append({"role": "user", "content": content_parts})
+        elif query:
+            messages.append({"role": "user", "content": query})
+        else:
             await utils.answer(message, "OnlySq: Не удалось сформировать части запроса (нет текста или медиа).")
-            return
+            return []
 
-        messages.append({"role": "user", "content": content_parts})
-
-        try:
-            completion = await client.chat.completions.create(
-                model=self.selected_models["onlysq"],
-                messages=messages,
-            )
-            answer = completion.choices[0].message.content
-            await utils.answer(message, f"<b>OnlySq ({self.selected_models['onlysq']}):</b>\n{answer}")
-            if str(message.chat_id) in self.chat_contexts and self.chat_contexts[str(message.chat_id)]:
-                self.chat_histories[str(message.chat_id)].append({"role": "model", "content": answer})
-                self.db.set(self.strings["name"], "chat_histories", self.chat_histories)
-        except Exception as e:
-            await utils.answer(message, f"Ошибка при получении ответа от OnlySq: {str(e)}")
+        return messages
 
     async def chatcmd(self, message):
         """Включает/выключает режим контекстного диалога"""
