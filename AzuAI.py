@@ -12,7 +12,7 @@ import base64
 import mimetypes
 import traceback
 
-MAX_BUTTONS_PER_PAGE = 50
+MAX_BUTTONS_PER_PAGE = 90
 SUPPORTED_TEXT_MIMES = ['text/plain', 'text/html', 'text/css', 'text/javascript', 'application/json', 'application/x-python', 'text/x-python']
 
 SEARCH_KEYWORDS = {
