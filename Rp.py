@@ -33,7 +33,7 @@ class Rp(loader.Module):
                 pass  # Игнорируем ошибки создания директории
     
     # Константы для регулярных выражений
-    DATE_PATTERN = re.compile(r"\d{2}\s[а-яА-Я]+\s2025г\.")
+    DATE_PATTERN = re.compile(r"\d{2}\s[а-яА-Я]+\s2026г\.")
     PAIR_NUMBER_PATTERN = re.compile(r"[^0-7]")
     GROUP_PATTERNS = [
         re.compile(r'2-ОТС\s*-?\s*1', re.IGNORECASE),

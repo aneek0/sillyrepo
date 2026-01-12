@@ -15,14 +15,8 @@ class AzuWeatherMod(loader.Module):
     }
 
     def __init__(self):
-        self.config = loader.ModuleConfig(
-            loader.ConfigValue(
-                "api_key",
-                None,
-                lambda: "API-ключ от OpenWeatherMap",
-                validator=loader.validators.String()
-            )
-        )
+        # Хардкод API-ключа OpenWeatherMap
+        self.api_key = "242a1a356927a2df51d0f8ca7221e23b"
 
     async def weathercmd(self, message):
         """Команда .weather [-f] <город> - показывает погоду (с -f добавляет прогноз на 5 дней)"""
@@ -31,7 +25,7 @@ class AzuWeatherMod(loader.Module):
             await utils.answer(message, self.strings["no_city"])
             return
 
-        if not self.config["api_key"]:
+        if not self.api_key:
             await utils.answer(message, self.strings["no_api_key"])
             return
 
@@ -43,7 +37,7 @@ class AzuWeatherMod(loader.Module):
             await utils.answer(message, self.strings["no_city"])
             return
 
-        api_key = self.config["api_key"]
+        api_key = self.api_key
 
         # URL для текущей погоды
         current_url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric&lang=ru"
