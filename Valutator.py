@@ -20,7 +20,7 @@ class ValutatorMod(loader.Module):
         async with self._client.conversation("@aneekocurrency_bot") as conv:
             try:
                 await conv.send_message(args)
-                response = await conv.get_response()
+                response = await conv.get_response(timeout=5)
                 await utils.answer(message, response.text)
             except Exception as e:
                 await utils.answer(message, f"<b>Error:</b> {str(e)}")
