@@ -50,6 +50,10 @@ class AzuAI(loader.Module):
         self.db = db
         self.chat_contexts = self.db.get(self.strings["name"], "chat_contexts", {})
         self.chat_histories = self.db.get(self.strings["name"], "chat_histories", {})
+        # Загружаем сохраненные модели или используем дефолтные
+        saved_models = self.db.get(self.strings["name"], "selected_models", {})
+        if saved_models:
+            self.selected_models.update(saved_models)
         await self._fetch_models()
 
     # ========== Методы загрузки моделей ==========
@@ -273,6 +277,8 @@ class AzuAI(loader.Module):
     async def _set_model(self, call, service, model, page=0):
         """Установить выбранную модель"""
         self.selected_models[service] = model
+        # Сохраняем выбранные модели в базу данных
+        self.db.set(self.strings["name"], "selected_models", self.selected_models)
         await call.edit(f"✅ <b>Модель выбрана:</b> {model}")
         await asyncio.sleep(1)
         await self._show_models(call, service, page)
@@ -685,8 +691,8 @@ class AzuAI(loader.Module):
             try:
                 await utils.answer(
                     message,
-                    "⚠️ <b>OnlySq:</b> модель <code>gemini-3-flash</code> не справилась.\n"
-                    "🔁 Переключаюсь на <code>gpt-5.2-chat</code> и повторяю запрос…"
+                    f"⚠️ <b>OnlySq:</b> модель <code>{self.selected_models['onlysq']}</code> не справилась.\n"
+                    f"🔁 Переключаюсь на <code>{fallback_model}</code> и повторяю запрос…"
                 )
 
                 completion = await client.chat.completions.create(
