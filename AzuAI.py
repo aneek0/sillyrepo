@@ -12,7 +12,7 @@ import base64
 import mimetypes
 import traceback
 
-MAX_BUTTONS_PER_PAGE = 50
+MAX_BUTTONS_PER_PAGE = 90
 SUPPORTED_TEXT_MIMES = ['text/plain', 'text/html', 'text/css', 'text/javascript', 'application/json', 'application/x-python', 'text/x-python']
 
 SEARCH_KEYWORDS = {
@@ -636,10 +636,12 @@ class AzuAI(loader.Module):
                 # Для не-Gemini моделей: tool calling
                 tools = self._create_search_tool()
 
+        primary_model = self.selected_models["onlysq"]
+        fallback_model = "gpt-5.2-chat"
+
         try:
-            # Inline processing instead of missing _process_onlysq_completion
             completion = await client.chat.completions.create(
-                model=self.selected_models["onlysq"],
+                model=primary_model,
                 messages=messages,
                 tools=tools if tools else None
             )
@@ -679,11 +681,39 @@ class AzuAI(loader.Module):
                     user_content = self._get_user_content(query, media_path)
                     self._save_chat_history(chat_id, user_content, answer)
         except Exception as e:
-            error_details = f"{str(e)}\n\nТип ошибки: {type(e).__name__}"
-            if len(error_details) > 500:
-                error_details = error_details[:500] + "..."
-            await utils.answer(message, f"❌ Ошибка при получении ответа от OnlySq:\n{error_details}")
-            print(f"OnlySq error traceback:\n{traceback.format_exc()}")
+            # === FALLBACK TO GPT-5.2-CHAT ===
+            try:
+                await utils.answer(
+                    message,
+                    "⚠️ <b>OnlySq:</b> модель <code>gemini-3-flash</code> не справилась.\n"
+                    "🔁 Переключаюсь на <code>gpt-5.2-chat</code> и повторяю запрос…"
+                )
+
+                completion = await client.chat.completions.create(
+                    model=fallback_model,
+                    messages=messages
+                )
+
+                answer = completion.choices[0].message.content
+                if answer:
+                    await utils.answer(
+                        message,
+                        f"<b>OnlySq (fallback → {fallback_model}):</b>\n{answer}"
+                    )
+                    if chat_id in self.chat_contexts and self.chat_contexts[chat_id]:
+                        user_content = self._get_user_content(query, media_path)
+                        self._save_chat_history(chat_id, user_content, answer)
+                    return
+
+            except Exception as fallback_error:
+                error_details = f"{str(fallback_error)}\n\nТип ошибки: {type(fallback_error).__name__}"
+                if len(error_details) > 500:
+                    error_details = error_details[:500] + "..."
+                await utils.answer(
+                    message,
+                    f"❌ <b>OnlySq:</b> ошибка даже после fallback на <code>{fallback_model}</code>:\n{error_details}"
+                )
+                print(f"OnlySq fallback error traceback:\n{traceback.format_exc()}")
 
     def _convert_history_to_messages(self, history):
         """Конвертировать историю в формат messages"""
