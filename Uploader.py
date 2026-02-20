@@ -17,9 +17,7 @@ class UploaderMod(loader.Module):
     }
 
     SERVICES = {
-        "envs": ("https://envs.sh", "file"),
         "catbox": ("https://catbox.moe/user/api.php", "fileToUpload", {"reqtype": "fileupload"}),
-        "oxo": ("https://0x0.st", "file"),
         "kappa": ("https://kappa.lol/api/upload", "file", None, True),
         "aneeko": ("https://rp.aneeko.online", "file"),
     }
@@ -63,17 +61,9 @@ class UploaderMod(loader.Module):
         else:
             await utils.answer(msg, self.strings("error").format(url or "Неизвестная ошибка"))
 
-    async def envscmd(self, message: Message):
-        """Загрузить файл на envs.sh"""
-        await self.handle_upload(message, "envs")
-
     async def catboxcmd(self, message: Message):
         """Загрузить файл на catbox.moe"""
         await self.handle_upload(message, "catbox")
-
-    async def oxocmd(self, message: Message):
-        """Загрузить файл на oxo.st"""
-        await self.handle_upload(message, "oxo")
 
     async def kappacmd(self, message: Message):
         """Загрузить файл на kappa.lol"""
