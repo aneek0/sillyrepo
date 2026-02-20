@@ -12,7 +12,7 @@ import base64
 import mimetypes
 import traceback
 
-MAX_BUTTONS_PER_PAGE = 8
+MAX_BUTTONS_PER_PAGE = 50
 SUPPORTED_TEXT_MIMES = ['text/plain', 'text/html', 'text/css', 'text/javascript', 'application/json', 'application/x-python', 'text/x-python']
 
 SEARCH_KEYWORDS = {
@@ -26,14 +26,16 @@ SEARCH_KEYWORDS = {
 class AzuAI(loader.Module):
     """Модуль для взаимодействия с нейросетями Gemini, OpenRouter и OnlySq с выбором модели через кнопки"""
     strings = {
-        "name": "AzuAI"
+        "name": "AzuAI",
+        "cfg_openai_key": "API-ключ OpenAI",
+        "openai_key_not_found": "API-ключ OpenAI не установлен"
     }
 
     def __init__(self):
         self.config = loader.ModuleConfig(
             "GEMINI_API_KEY", "", "API-ключ для Gemini AI",
             "OPENROUTER_API_KEY", "", "API-ключ для OpenRouter",
-            "ONLYSQ_API_KEY", "openai", "API-ключ для OnlySq (по умолчанию 'openai')",
+            "ONLYSQ_API_KEY", "OPENAI_KEY", lambda m: self.strings("cfg_openai_key", m),
             "TAVILY_API_KEY", "", "API-ключ для Tavily (поиск в интернете)",
             "DEFAULT_PROVIDER", 1, "Провайдер по умолчанию: 1 - Gemini, 2 - OpenRouter, 3 - OnlySq",
             "ONLYSQ_IMAGE_MODEL", "kandinsky", "Модель OnlySq для генерации изображений"
@@ -123,6 +125,10 @@ class AzuAI(loader.Module):
 
     async def _fetch_onlysq_models(self):
         """Загрузить модели OnlySq"""
+        if self.config["ONLYSQ_API_KEY"] == "OPENAI_KEY":
+            print("API-ключ OnlySq не установлен, пропуск загрузки моделей.")
+            self.model_lists["onlysq"] = []
+            return
         if not self.config["ONLYSQ_API_KEY"]:
             print("API-ключ OnlySq не установлен, пропуск загрузки моделей.")
             self.model_lists["onlysq"] = []
@@ -588,6 +594,9 @@ class AzuAI(loader.Module):
 
     async def _ask_onlysq(self, message, query, history, media_path, chat_id):
         api_key = self.config["ONLYSQ_API_KEY"]
+        if api_key == "OPENAI_KEY":
+            await utils.answer(message, self.strings("openai_key_not_found", message))
+            return
         if not api_key:
             await utils.answer(message, "API-ключ для OnlySq не установлен.")
             return
@@ -772,7 +781,13 @@ class AzuAI(loader.Module):
 
     async def _generate_image_onlysq(self, message, prompt):
         """Генерирует изображение с помощью OnlySq API"""
-        api_key = self.config["ONLYSQ_API_KEY"] or "openai"
+        api_key = self.config["ONLYSQ_API_KEY"]
+        if api_key == "OPENAI_KEY":
+            await utils.answer(message, self.strings("openai_key_not_found", message))
+            return None
+        if not api_key:
+            await utils.answer(message, "API-ключ для OnlySq не установлен.")
+            return None
         image_model = self.config["ONLYSQ_IMAGE_MODEL"]
         url = "https://api.onlysq.ru/ai/imagen"
         headers = {"Content-Type": "application/json"}
