@@ -43,8 +43,13 @@ class UploaderMod(loader.Module):
             data = config[2] if len(config) > 2 and config[2] else {}
             headers = {}
             if service == "aneeko" and original_name:
-                headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
-                headers["overwrite"] = "true"
+                fname = file.name if hasattr(file, 'name') and file.name else "file"
+                headers["filename"] = fname
+                # Пробуем удалить файл перед загрузкой, чтобы избежать 409
+                try:
+                    requests.delete(f"{config[0]}/{fname}", timeout=10)
+                except:
+                    pass
             
             response = requests.post(config[0], files=files, data=data, headers=headers, timeout=30)
             if response.status_code != 200:
