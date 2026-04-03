@@ -34,41 +34,6 @@ class UploaderMod(loader.Module):
         file.name = getattr(msg.file, 'name', None) or "file"
         return file
 
-    async def upload_file(self, service: str, file):
-        if service not in self.SERVICES:
-            return f"Неподдерживаемый сервис: {service}"
-        config = self.SERVICES[service]
-        try:
-            files = {config[1]: file}
-            data = config[2] if len(config) > 2 and config[2] else {}
-            response = requests.post(config[0], files=files, data=data, timeout=30)
-            if response.status_code != 200:
-                return f"HTTP {response.status_code}"
-            if len(config) > 3 and config[3]:  # kappa
-                return f"https://kappa.lol/{response.json()['id']}"
-            return response.text.strip() or None
-        except:
-            return "Ошибка загрузки"
-
-    async def handle_upload(self, message: Message, service: str):
-        msg = await utils.answer(message, self.strings("uploading"))
-        file = await self.get_file(message)
-        if not file:
-            return
-        url = await self.upload_file(service, file)
-        if url and url.startswith("http"):
-            await utils.answer(msg, self.strings("uploaded").format(url))
-        else:
-            await utils.answer(msg, self.strings("error").format(url or "Неизвестная ошибка"))
-
-    async def catboxcmd(self, message: Message):
-        """Загрузить файл на catbox.moe"""
-        await self.handle_upload(message, "catbox")
-
-    async def kappacmd(self, message: Message):
-        """Загрузить файл на kappa.lol"""
-        await self.handle_upload(message, "kappa")
-
     async def upload_file(self, service: str, file, original_name: bool = False):
         if service not in self.SERVICES:
             return f"Неподдерживаемый сервис: {service}"
@@ -79,6 +44,7 @@ class UploaderMod(loader.Module):
             headers = {}
             if service == "aneeko" and original_name:
                 headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
+                headers["overwrite"] = "true"
             
             response = requests.post(config[0], files=files, data=data, headers=headers, timeout=30)
             if response.status_code != 200:
@@ -99,6 +65,14 @@ class UploaderMod(loader.Module):
             await utils.answer(msg, self.strings("uploaded").format(url))
         else:
             await utils.answer(msg, self.strings("error").format(url or "Неизвестная ошибка"))
+
+    async def catboxcmd(self, message: Message):
+        """Загрузить файл на catbox.moe"""
+        await self.handle_upload(message, "catbox")
+
+    async def kappacmd(self, message: Message):
+        """Загрузить файл на kappa.lol"""
+        await self.handle_upload(message, "kappa")
 
     async def aneekocmd(self, message: Message):
         """Загрузить файл на rp.aneeko.online (используйте -n для сохранения имени)"""
