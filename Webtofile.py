@@ -68,7 +68,7 @@ class Web2fileMod(loader.Module):
                     progress = (downloaded / total_size) * 100
 
                     elapsed_time = time.time() - start_time
-                    speed = downloaded / elapsed_time if elapsed_time > 0 else 0
+                    speed = downloaded / elapsed_time if elapsed_time > 0.1 else downloaded
                     speed_str = self.format_speed(speed)
 
                     if time.time() - last_update_time >= 1 and int(progress) != last_progress:
