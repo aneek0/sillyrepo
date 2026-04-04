@@ -20,7 +20,7 @@ class UploaderMod(loader.Module):
         "catbox": ("https://catbox.moe/user/api.php", "fileToUpload", {"reqtype": "fileupload"}),
         "kappa": ("https://kappa.lol/api/upload", "file", None, True),
         "aneeko": ("https://rp.aneeko.online", "file"),
-        "rustypaste": ("http://127.0.0.1:8000/upload", "file", "https://rp.aneeko.online"),
+        "rustypaste": ("http://127.0.0.1:8000/", "file", "https://rp.aneeko.online"),
     }
 
     async def get_file(self, message: Message):
