@@ -40,24 +40,23 @@ class UploaderMod(loader.Module):
             return f"Неподдерживаемый сервис: {service}"
         config = self.SERVICES[service]
         try:
-            # Для rustypaste явно формируем кортеж (filename, file_object)
+            files = {config[1]: file}
+            data = config[2] if len(config) > 2 and config[2] else {}
+            headers = {}
+            
             if service == "rustypaste":
+                # Rustypaste может требовать имя файла прямо в поле
                 fname = file.name if hasattr(file, 'name') and file.name else "file"
-                files = {config[1]: (fname, file)}
-                data = None
-                headers = {}
+                files = {config[1]: (fname, file, 'application/octet-stream')}
+                data = None 
                 if original_name:
                     headers["filename"] = fname
                     headers["overwrite"] = "true"
-            else:
-                files = {config[1]: file}
-                data = config[2] if len(config) > 2 and config[2] else {}
-                headers = {}
-                if service == "aneeko" and original_name:
-                    headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
-                    headers["overwrite"] = "true"
+            elif service == "aneeko" and original_name:
+                headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
+                headers["overwrite"] = "true"
             
-            response = requests.post(config[0], files=files, data=data, headers=headers, timeout=30)
+            response = requests.post(config[0], files=files, data=data if data else None, headers=headers, timeout=30)
             if response.status_code != 200:
                 return f"HTTP {response.status_code}"
             if len(config) > 3 and config[3]:  # kappa
