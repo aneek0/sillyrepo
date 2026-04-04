@@ -20,7 +20,7 @@ class UploaderMod(loader.Module):
         "catbox": ("https://catbox.moe/user/api.php", "fileToUpload", {"reqtype": "fileupload"}),
         "kappa": ("https://kappa.lol/api/upload", "file", None, True),
         "aneeko": ("https://rp.aneeko.online", "file"),
-        "rustypaste": ("http://127.0.0.1:8000/upload", "file"),
+        "rustypaste": ("http://127.0.0.1:8000/upload", "file", "https://rp.aneeko.online"),
     }
 
     async def get_file(self, message: Message):
@@ -43,7 +43,7 @@ class UploaderMod(loader.Module):
             files = {config[1]: file}
             data = config[2] if len(config) > 2 and config[2] else {}
             headers = {}
-            if service == "aneeko" and original_name:
+            if (service == "aneeko" or service == "rustypaste") and original_name:
                 headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
                 headers["overwrite"] = "true"
             
@@ -52,6 +52,17 @@ class UploaderMod(loader.Module):
                 return f"HTTP {response.status_code}"
             if len(config) > 3 and config[3]:  # kappa
                 return f"https://kappa.lol/{response.json()['id']}"
+            
+            if service == "rustypaste":
+                try:
+                    rp_url = response.json()["url"]
+                    # Заменяем локальный адрес на публичный
+                    public_base = config[2] if len(config) > 2 else "https://rp.aneeko.online"
+                    local_base = "http://127.0.0.1:8000"
+                    return rp_url.replace(local_base, public_base)
+                except:
+                    return response.text.strip() or None
+                    
             return response.text.strip() or None
         except Exception as e:
             return f"Ошибка загрузки: {e}"
@@ -81,5 +92,6 @@ class UploaderMod(loader.Module):
         await self.handle_upload(message, "aneeko", original_name)
 
     async def rupcmd(self, message: Message):
-        """Загрузить файл на локальный rustypaste (127.0.0.1:8000)"""
-        await self.handle_upload(message, "rustypaste")
+        """Загрузить файл на локальный rustypaste (используйте -n для сохранения имени)"""
+        original_name = "-n" in (utils.get_args_raw(message) or "")
+        await self.handle_upload(message, "rustypaste", original_name)
