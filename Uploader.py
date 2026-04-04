@@ -20,6 +20,7 @@ class UploaderMod(loader.Module):
         "catbox": ("https://catbox.moe/user/api.php", "fileToUpload", {"reqtype": "fileupload"}),
         "kappa": ("https://kappa.lol/api/upload", "file", None, True),
         "aneeko": ("https://rp.aneeko.online", "file"),
+        "rustypaste": ("http://127.0.0.1:8000/upload", "file"),
     }
 
     async def get_file(self, message: Message):
@@ -78,3 +79,7 @@ class UploaderMod(loader.Module):
         """Загрузить файл на rp.aneeko.online (используйте -n для сохранения имени)"""
         original_name = "-n" in (utils.get_args_raw(message) or "")
         await self.handle_upload(message, "aneeko", original_name)
+
+    async def rupcmd(self, message: Message):
+        """Загрузить файл на локальный rustypaste (127.0.0.1:8000)"""
+        await self.handle_upload(message, "rustypaste")
