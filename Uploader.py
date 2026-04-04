@@ -63,14 +63,10 @@ class UploaderMod(loader.Module):
                 return f"https://kappa.lol/{response.json()['id']}"
             
             if service == "rustypaste":
-                try:
-                    rp_url = response.json()["url"]
-                    # Заменяем локальный адрес на публичный
-                    public_base = config[2] if len(config) > 2 else "https://rp.aneeko.online"
-                    local_base = "http://127.0.0.1:8000"
-                    return rp_url.replace(local_base, public_base)
-                except:
-                    return response.text.strip() or None
+                # Заменяем локальный адрес на публичный в любом ответе
+                public_base = config[2] if len(config) > 2 else "https://rp.aneeko.online"
+                local_base = "http://127.0.0.1:8000"
+                return response.text.strip().replace(local_base, public_base) or None
                     
             return response.text.strip() or None
         except Exception as e:
