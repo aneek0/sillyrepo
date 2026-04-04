@@ -40,12 +40,22 @@ class UploaderMod(loader.Module):
             return f"Неподдерживаемый сервис: {service}"
         config = self.SERVICES[service]
         try:
-            files = {config[1]: file}
-            data = config[2] if len(config) > 2 and config[2] else {}
-            headers = {}
-            if (service == "aneeko" or service == "rustypaste") and original_name:
-                headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
-                headers["overwrite"] = "true"
+            # Для rustypaste явно формируем кортеж (filename, file_object)
+            if service == "rustypaste":
+                fname = file.name if hasattr(file, 'name') and file.name else "file"
+                files = {config[1]: (fname, file)}
+                data = None
+                headers = {}
+                if original_name:
+                    headers["filename"] = fname
+                    headers["overwrite"] = "true"
+            else:
+                files = {config[1]: file}
+                data = config[2] if len(config) > 2 and config[2] else {}
+                headers = {}
+                if service == "aneeko" and original_name:
+                    headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
+                    headers["overwrite"] = "true"
             
             response = requests.post(config[0], files=files, data=data, headers=headers, timeout=30)
             if response.status_code != 200:
