@@ -2,6 +2,7 @@
 # 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import io
+import os
 import requests
 from telethon.tl.types import Message
 from .. import loader, utils
@@ -14,6 +15,7 @@ class UploaderMod(loader.Module):
         'no_file': '🚫 <b>Файл не найден.</b>',
         'uploaded': '🎡 <b>Файл <a href="{0}">загружен</a></b>!\n\n<code>{0}</code>',
         'error': '🚫 <b>Ошибка загрузки:</b> <code>{0}</code>',
+        'cfg_userhash': '🔑 Catbox userhash',
     }
 
     SERVICES = {
@@ -22,6 +24,13 @@ class UploaderMod(loader.Module):
         "aneeko": ("https://rp.aneeko.online", "file"),
         "rustypaste": ("http://127.0.0.1:8000/", "file", "https://rp.aneeko.online"),
     }
+
+    def __init__(self):
+        self.config = loader.ModuleConfig(
+            "CATBOX_USERHASH",
+            "",
+            lambda m: self.strings("cfg_userhash", m),
+        )
 
     async def get_file(self, message: Message):
         reply = await message.get_reply_message()
@@ -43,6 +52,14 @@ class UploaderMod(loader.Module):
             files = {config[1]: file}
             data = config[2] if len(config) > 2 and config[2] else {}
             headers = {}
+            
+            # Catbox authorization
+            if service == "catbox":
+                userhash = self.config.get("CATBOX_USERHASH")
+                if not userhash:
+                    userhash = os.getenv("CATBOX_USERHASH")
+                if userhash:
+                    data["userhash"] = userhash
             
             if service == "rustypaste":
                 # Rustypaste может требовать имя файла прямо в поле
