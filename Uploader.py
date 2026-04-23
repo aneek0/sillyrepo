@@ -20,6 +20,7 @@ class UploaderMod(loader.Module):
 
     SERVICES = {
         "catbox": ("https://catbox.moe/user/api.php", "fileToUpload", {"reqtype": "fileupload"}),
+        "litter": ("https://litterbox.catbox.moe/resources/internals/api.php", "fileToUpload", {"reqtype": "fileupload"}),
         "kappa": ("https://kappa.lol/api/upload", "file", None, True),
         "aneeko": ("https://rp.aneeko.online", "file"),
         "rustypaste": ("http://127.0.0.1:8000/", "file", "https://rp.aneeko.online"),
@@ -44,7 +45,7 @@ class UploaderMod(loader.Module):
         file.name = getattr(msg.file, 'name', None) or "file"
         return file
 
-    async def upload_file(self, service: str, file, original_name: bool = False):
+    async def upload_file(self, service: str, file, original_name: bool = False, litter_time: str = None):
         if service not in self.SERVICES:
             return f"Неподдерживаемый сервис: {service}"
         config = self.SERVICES[service]
@@ -60,6 +61,10 @@ class UploaderMod(loader.Module):
                     userhash = os.getenv("CATBOX_USERHASH")
                 if userhash:
                     data["userhash"] = userhash
+            
+            # Litterbox expiration time
+            if service == "litter":
+                data["time"] = litter_time or "1h"
             
             if service == "rustypaste":
                 # Rustypaste может требовать имя файла прямо в поле
@@ -89,12 +94,12 @@ class UploaderMod(loader.Module):
         except Exception as e:
             return f"Ошибка загрузки: {e}"
 
-    async def handle_upload(self, message: Message, service: str, original_name: bool = False):
+    async def handle_upload(self, message: Message, service: str, original_name: bool = False, litter_time: str = None):
         msg = await utils.answer(message, self.strings("uploading"))
         file = await self.get_file(message)
         if not file:
             return
-        url = await self.upload_file(service, file, original_name)
+        url = await self.upload_file(service, file, original_name, litter_time)
         if url and url.startswith("http"):
             await utils.answer(msg, self.strings("uploaded").format(url))
         else:
@@ -103,6 +108,16 @@ class UploaderMod(loader.Module):
     async def catboxcmd(self, message: Message):
         """Загрузить файл на catbox.moe"""
         await self.handle_upload(message, "catbox")
+
+    async def littercmd(self, message: Message):
+        """Загрузить файл на litter.catbox.moe (временное хранилище, используйте -t для времени: 1h/12h/24h/72h)"""
+        args = utils.get_args_raw(message) or ""
+        time_opt = "1h"
+        for t in ["72h", "24h", "12h", "1h"]:
+            if t in args:
+                time_opt = t
+                break
+        await self.handle_upload(message, "litter", litter_time=time_opt)
 
     async def kappacmd(self, message: Message):
         """Загрузить файл на kappa.lol"""
