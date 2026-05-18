@@ -81,8 +81,8 @@ class Web2fileMod(loader.Module):
             content_disposition = response.headers.get('Content-Disposition', '')
             filename = None
             if content_disposition:
-                fname_match = re.findall("filename\*=UTF-8''(.+)|filename=\"?([^\";]+)\"?", content_disposition)
-                if fname_match:
+                fname_match = re.findall(r"filename\*=UTF-8''(.+)|filename=\"?([^\";]+)\"?", content_disposition)
+            if fname_match:
                     filename = fname_match[0][0] or fname_match[0][1]
             
             if not filename:
