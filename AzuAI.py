@@ -24,6 +24,7 @@ SYSTEM_PROMPT = (
 )
 
 MAX_BUTTONS_PER_PAGE = 90
+REQUEST_TIMEOUT = 120
 
 _OBVIOUSLY_TEXT_ONLY = (
     "deepseek-r1", "o1-mini", "o3-mini", "qwq", "whisper",
@@ -144,8 +145,8 @@ class AzuAIMod(loader.Module):
             return None
         return AsyncOpenAI(api_key=key, base_url=url.rstrip("/") + "/")
 
-    async def _fetch_models(self) -> list[str]:
-        if self._cached_models:
+    async def _fetch_models(self, force: bool = False) -> list[str]:
+        if self._cached_models and not force:
             return self._cached_models
         url = self.config["AI_API_URL"]
         key = self.config["AI_API_KEY"]
@@ -193,7 +194,7 @@ class AzuAIMod(loader.Module):
         nav = []
         if page > 1:
             nav.append({"text": "◀", "callback": self._cb_page, "args": (page - 1,)})
-        nav.append({"text": f"‹ {page}/{total} ›", "callback": self._cb_page, "args": (page,)})
+        nav.append({"text": f"‹ {page}/{total} ›", "callback": self._cb_noop, "args": ()})
         if page < total:
             nav.append({"text": "▶", "callback": self._cb_page, "args": (page + 1,)})
         if nav:
@@ -272,11 +273,21 @@ class AzuAIMod(loader.Module):
         if hasattr(media, "document"):
             doc = media.document
             fname = "file"
+            mime = ""
             if hasattr(doc, "attributes"):
                 for attr in doc.attributes:
                     if hasattr(attr, "file_name"):
                         fname = attr.file_name
                         break
+            if hasattr(doc, "mime_type"):
+                mime = doc.mime_type or ""
+
+            # Images sent as files (not compressed) — treat as photos
+            if mime.startswith("image/"):
+                data = await reply.download_media(bytes)
+                b64 = base64.b64encode(data).decode()
+                return b64, True
+
             data = await reply.download_media(bytes)
             try:
                 text = data.decode("utf-8")
@@ -346,7 +357,7 @@ class AzuAIMod(loader.Module):
                     tool_choice="auto",
                     max_tokens=4096,
                 ),
-                timeout=120,
+                timeout=REQUEST_TIMEOUT,
             )
 
             msg = response.choices[0].message
@@ -373,7 +384,7 @@ class AzuAIMod(loader.Module):
                         messages=messages,
                         max_tokens=4096,
                     ),
-                    timeout=120,
+                    timeout=REQUEST_TIMEOUT,
                 )
                 answer = response2.choices[0].message.content or ""
             else:
@@ -391,7 +402,7 @@ class AzuAIMod(loader.Module):
             return answer, vision_skipped
 
         except asyncio.TimeoutError:
-            return "⚠️ Время ожидания истекло (120с)", False
+            return f"⚠️ Время ожидания истекло ({REQUEST_TIMEOUT}с)", False
         except Exception as e:
             return f"⚠️ {e}", False
 
@@ -472,9 +483,12 @@ class AzuAIMod(loader.Module):
         await utils.answer(message, self.strings["chat_cleared"])
 
     async def aicfgcmd(self, message):
-        """.aicfg — выбор модели"""
+        """.aicfg [refresh] — выбор модели. С аргументом refresh обновит кэш."""
+        args = utils.get_args_raw(message)
+        if args and args.strip().lower() == "refresh":
+            self._cached_models = []
         await utils.answer(message, self.strings["loading_models"])
-        models = await self._fetch_models()
+        models = await self._fetch_models(force=(args and args.strip().lower() == "refresh"))
         if not models:
             err = self._last_fetch_error or "неизвестная ошибка"
             await utils.answer(message, f"{self.strings['no_models']}\n\n<code>{err}</code>")
@@ -483,6 +497,9 @@ class AzuAIMod(loader.Module):
         buttons, page, total = self._page_buttons(models, 1)
         text = self.strings["select_model"].format(page, total)
         await self.inline.form(text=text, reply_markup=buttons, message=message)
+
+    async def _cb_noop(self, call: InlineCall):
+        await call.answer()
 
     async def _cb_page(self, call: InlineCall, page: int):
         models = await self._fetch_models()
