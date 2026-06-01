@@ -404,11 +404,8 @@ class AzuAIMod(loader.Module):
     # ── commands ──────────────────────────────────────────────────────────────
 
     async def askcmd(self, message):
-        """.ask <вопрос> — задать вопрос AI"""
+        """.ask [вопрос] — задать вопрос AI. Если без текста — использует реплей как вопрос."""
         args = utils.get_args_raw(message)
-        if not args:
-            await utils.answer(message, self.strings["no_question"])
-            return
 
         if not self.config["AI_API_URL"]:
             await utils.answer(message, self.strings["no_api_url"])
@@ -430,8 +427,18 @@ class AzuAIMod(loader.Module):
         if reply_content:
             if is_photo:
                 vision_b64 = reply_content
+                # If no text args, use a default prompt for the photo
+                if not args:
+                    args = "Опиши это изображение"
             else:
-                args = f"{args}\n\n{reply_content}"
+                if args:
+                    args = f"{args}\n\n{reply_content}"
+                else:
+                    args = reply_content
+
+        if not args:
+            await utils.answer(message, self.strings["no_question"])
+            return
 
         chat_id = utils.get_chat_id(message)
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
