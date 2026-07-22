@@ -1,4 +1,2 @@
-.roo
-.kilocode/
-.__pycache__
-.codacy
+__pycache__/
+*.pyc

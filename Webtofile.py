@@ -1,146 +1,78 @@
-# meta developer: Azu-nyyyyyyaaaaan
-# 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
-
 import io
-import requests
 import re
-import time
+import mimetypes
+import requests
 from telethon.tl.types import Message
 from .. import loader, utils
 
 
 @loader.tds
 class Web2fileMod(loader.Module):
-    strings = {
-        "name": "Web2file",
-        "no_args": "🚫 <b>Specify link</b>",
-        "fetch_error": "🚫 <b>Download error</b>",
-        "progress_download": "📥 <b>Downloading:</b> {0}% at {1}/s",
-        "progress_upload": "📤 <b>Uploading:</b> {0}% at {1}/s",
-    }
+    strings = {"name": "Web2file"}
 
     async def wtfcmd(self, message: Message):
         website = utils.get_args_raw(message)
-
+        if not website and message.reply_to_msg_id:
+            replied = await message.get_reply_message()
+            website = self._extract_url(replied.text) if replied else None
         if not website:
-            if message.reply_to_msg_id:
-                replied_msg = await message.get_reply_message()
-                website = self.extract_url_from_text(replied_msg.text) if replied_msg else None
-        
-        if not website:
-            await utils.answer(message, self.strings("no_args", message))
+            await utils.answer(message, "\U0001f6ab <b>Specify link</b>")
             return
 
-        website = re.sub(r'<.*?>', '', website)
+        website = re.sub(r"<.*?>", "", website)
         if not website.startswith("http"):
             website = "http://" + website
 
-        # Delete the original message
         await message.delete()
 
-        # Create new message for progress
-        progress_message = await self._client.send_message(
-            message.chat_id,
-            self.strings("progress_download", message).format(0, "0 B/s")
-        )
-
         try:
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"}
-            response = requests.get(website, stream=True, headers=headers, timeout=30)
-            if response.status_code != 200:
-                await utils.answer(progress_message, f"🚫 <b>Error {response.status_code}: {response.reason}</b>")
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+            resp = requests.get(website, stream=True, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                await self._client.send_message(
+                    message.chat_id,
+                    f"\U0001f6ab <b>Error {resp.status_code}: {resp.reason}</b>",
+                )
                 return
 
-            total_size = int(response.headers.get('Content-Length', 0))
-            downloaded = 0
-            start_time = time.time()
-
             f = io.BytesIO()
-
-            last_update_time = time.time()
-            last_progress = 0
-
-            for chunk in response.iter_content(chunk_size=1024):
+            for chunk in resp.iter_content(1024):
                 if chunk:
                     f.write(chunk)
-                    downloaded += len(chunk)
-
-                    progress = (downloaded / total_size) * 100
-
-                    elapsed_time = time.time() - start_time
-                    speed = downloaded / elapsed_time if elapsed_time > 0.1 else downloaded
-                    speed_str = self.format_speed(speed)
-
-                    if time.time() - last_update_time >= 1 and int(progress) != last_progress:
-                        await progress_message.edit(self.strings("progress_download", message).format(int(progress), speed_str))
-                        last_update_time = time.time()
-                        last_progress = int(progress)
-
             f.seek(0)
 
-            content_disposition = response.headers.get('Content-Disposition', '')
+            cd = resp.headers.get("Content-Disposition", "")
             filename = None
-            if content_disposition:
-                fname_match = re.findall(r"filename\*=UTF-8''(.+)|filename=\"?([^\";]+)\"?", content_disposition)
-            if fname_match:
-                    filename = fname_match[0][0] or fname_match[0][1]
-            
+            if cd:
+                m = re.findall(r"filename\*=UTF-8''(.+)|filename=\"?([^\";]+)\"?", cd)
+                if m:
+                    filename = m[0][0] or m[0][1]
             if not filename:
                 filename = website.split("/")[-1] or "file"
-                if '.' not in filename:
-                    content_type = response.headers.get('Content-Type', '')
-                    ext_map = {
-                        'image/png': '.png',
-                        'image/jpeg': '.jpg',
-                        'image/gif': '.gif',
-                        'application/pdf': '.pdf',
-                        'application/zip': '.zip',
-                        'application/octet-stream': '.bin',
-                        'text/plain': '.txt',
-                    }
-                    filename += ext_map.get(content_type.split(';')[0], '')
-            
+                if "." not in filename:
+                    ext = mimetypes.guess_extension(resp.headers.get("Content-Type", "").split(";")[0]) or ""
+                    filename += ext
             f.name = filename
 
         except requests.exceptions.RequestException as e:
-            await utils.answer(progress_message, f"🚫 <b>Request error: {e}</b>")
+            await self._client.send_message(
+                message.chat_id, f"\U0001f6ab <b>Request error: {e}</b>"
+            )
             return
         except Exception as e:
-            await utils.answer(progress_message, f"🚫 <b>Unexpected error: {e}</b>")
+            await self._client.send_message(
+                message.chat_id, f"\U0001f6ab <b>Unexpected error: {e}</b>"
+            )
             return
 
-        caption = f"📥 Downloaded from: <code>{website}</code>"
-
-        self._upload_start_time = time.time()
         await self._client.send_file(
             message.chat_id,
             file=f,
-            caption=caption,
-            progress_callback=lambda current, total: self._update_progress_upload(current, total, progress_message),
+            caption=f"\U0001f4e5 Downloaded from: <code>{website}</code>",
         )
 
-        await progress_message.delete()
-
-    async def _update_progress_upload(self, current: int, total: int, message: Message):
-        progress = (current / total) * 100
-        speed = current / (time.time() - self._upload_start_time) if hasattr(self, "_upload_start_time") else 0
-        speed_str = self.format_speed(speed)
-
-        if int(progress) != getattr(self, "_last_upload_progress", 0):
-            await message.edit(self.strings("progress_upload", message).format(int(progress), speed_str))
-            self._last_upload_progress = int(progress)
-
-    def format_speed(self, speed: float) -> str:
-        units = ['B/s', 'KB/s', 'MB/s', 'GB/s']
-        for unit in units:
-            if speed < 1024:
-                return f"{speed:.2f} {unit}"
-            speed /= 1024
-        return f"{speed:.2f} TB/s"
-
-    def extract_url_from_text(self, text: str) -> str:
-        url_pattern = r'(https?://[^\s]+)'
-        match = re.search(url_pattern, text)
-        if match:
-            return match.group(0)
-        return None
+    def _extract_url(self, text: str) -> str:
+        m = re.search(r"(https?://[^\s]+)", text)
+        return m.group(0) if m else None

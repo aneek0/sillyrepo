@@ -1,4 +1,4 @@
-# meta developer: Azu-nyyyyyyaaaaan
+# meta developer: @aneek0
 # 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import aiohttp
@@ -71,18 +71,10 @@ class QRtoolsMod(loader.Module):
             return
             
         try:
-            # Создаем QR код
-            qr = qrcode.QRCode(
-                version=1,
-                error_correction=qrcode.constants.ERROR_CORRECT_L,
-                box_size=10,
-                border=4,
-            )
+            qr = qrcode.QRCode()
             qr.add_data(text)
-            qr.make(fit=True)
-            
-            # Создаем изображение
-            img = qr.make_image(fill_color="black", back_color="white")
+            qr.make()
+            img = qr.make_image()
             
             # Конвертируем в BytesIO
             buffer = BytesIO()
@@ -95,8 +87,7 @@ class QRtoolsMod(loader.Module):
             await message.client.send_file(
                 message.to_id, 
                 buffer, 
-                caption=f"<b>📱 QR код для:</b> {text}",
-                force_document=False
+                caption=f"<b>📱 QR код для:</b> {text}"
             )
             
         except Exception as e:

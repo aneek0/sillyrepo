@@ -1,18 +1,15 @@
-# meta developer: Azu-nyyyyyyaaaaan
+# meta developer: @aneek0
 
 import asyncio
 import base64
 import json
-import logging
-import math
 import os
-
+import re
+import urllib.request
 from openai import AsyncOpenAI
 
 from .. import loader, utils
 from ..inline.types import InlineCall
-
-logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "Format all output in Telegram HTML: "
@@ -27,11 +24,15 @@ MAX_BUTTONS_PER_PAGE = 90
 REQUEST_TIMEOUT = 120
 
 _OBVIOUSLY_TEXT_ONLY = (
-    "deepseek-r1", "o1-mini", "o3-mini", "qwq", "whisper",
+    "qwq", "whisper",
     "tts", "embedding", "davinci", "babbage", "ada",
 )
 
 _vision_cache: dict[str, bool] = {}
+
+
+def _strip_mdv2_escapes(text: str) -> str:
+    return re.sub(r'\\([_*\[\]()~`>#+\-=|{}.!\\])', r'\1', text)
 
 
 def _get_context_dir() -> str:
@@ -160,7 +161,6 @@ class AzuAIMod(loader.Module):
                 "Content-Type": "application/json",
             }
             try:
-                import urllib.request, urllib.error
                 req = urllib.request.Request(
                     base,
                     headers=headers,
@@ -180,11 +180,11 @@ class AzuAIMod(loader.Module):
             except Exception:
                 continue
 
-        self._last_fetch_error = f"Не удалось получить список моделей ни с одного эндпоинта"
+        self._last_fetch_error = "Не удалось получить список моделей ни с одного эндпоинта"
         return []
 
     def _page_buttons(self, models: list[str], page: int) -> tuple[list, int, int]:
-        total = math.ceil(len(models) / MAX_BUTTONS_PER_PAGE) or 1
+        total = (len(models) + MAX_BUTTONS_PER_PAGE - 1) // MAX_BUTTONS_PER_PAGE or 1
         page = max(1, min(page, total))
         start = (page - 1) * MAX_BUTTONS_PER_PAGE
         chunk = models[start: start + MAX_BUTTONS_PER_PAGE]
@@ -273,14 +273,11 @@ class AzuAIMod(loader.Module):
         if hasattr(media, "document"):
             doc = media.document
             fname = "file"
-            mime = ""
-            if hasattr(doc, "attributes"):
-                for attr in doc.attributes:
-                    if hasattr(attr, "file_name"):
-                        fname = attr.file_name
-                        break
-            if hasattr(doc, "mime_type"):
-                mime = doc.mime_type or ""
+            for attr in doc.attributes:
+                if hasattr(attr, "file_name"):
+                    fname = attr.file_name
+                    break
+            mime = doc.mime_type or ""
 
             # Images sent as files (not compressed) — treat as photos
             if mime.startswith("image/"):
@@ -318,13 +315,9 @@ class AzuAIMod(loader.Module):
                 {"type": "text", "text": question},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{vision_b64}"}},
             ]
-            vision_skipped = False
-        elif vision_b64 and not vision_ok:
-            user_content = question
-            vision_skipped = True
         else:
             user_content = question
-            vision_skipped = False
+        vision_skipped = bool(vision_b64 and not vision_ok)
 
         messages = [{"role": "system", "content": SYSTEM_PROMPT}]
         if ctx.get("enabled") and ctx.get("history"):
@@ -406,12 +399,6 @@ class AzuAIMod(loader.Module):
         except Exception as e:
             return f"⚠️ {e}", False
 
-    @staticmethod
-    def _strip_mdv2_escapes(text: str) -> str:
-        """Remove MarkdownV2 backslash escapes that models sometimes add."""
-        import re
-        return re.sub(r'\\([_*\[\]()~`>#+\-=|{}.!\\])', r'\1', text)
-
     # ── commands ──────────────────────────────────────────────────────────────
 
     async def askcmd(self, message):
@@ -453,7 +440,7 @@ class AzuAIMod(loader.Module):
 
         chat_id = utils.get_chat_id(message)
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
-        answer = self._strip_mdv2_escapes(answer)
+        answer = _strip_mdv2_escapes(answer)
 
         prefix = ""
         if vision_skipped:

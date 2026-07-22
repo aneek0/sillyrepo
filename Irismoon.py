@@ -1,9 +1,9 @@
-# meta developer: Azu-nyyyyyyaaaaan
+# meta developer: @aneek0
 # 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 version = (2, 2, 8)
 
-# meta developer: @stopxiaomi & @Azu_nyyyyyyaaaaan
+# meta developer: @stopxiaomi & @aneek0
 
 import random
 from datetime import datetime, timedelta

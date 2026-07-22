@@ -1,4 +1,4 @@
-# meta developer: Azu-nyyyyyyaaaaan
+# meta developer: @aneek0
 # 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import io
@@ -19,17 +19,16 @@ class UploaderMod(loader.Module):
     }
 
     SERVICES = {
-        "catbox": ("https://catbox.moe/user/api.php", "fileToUpload", {"reqtype": "fileupload"}),
-        "litter": ("https://litterbox.catbox.moe/resources/internals/api.php", "fileToUpload", {"reqtype": "fileupload"}),
-        "kappa": ("https://kappa.lol/api/upload", "file", None, True),
-        "aneeko": ("https://rp.aneeko.online", "file"),
-        "rustypaste": ("http://127.0.0.1:8000/", "file", "https://rp.aneeko.online"),
+        "catbox": {"url": "https://catbox.moe/user/api.php", "field": "fileToUpload", "data": {"reqtype": "fileupload"}},
+        "litter": {"url": "https://litterbox.catbox.moe/resources/internals/api.php", "field": "fileToUpload", "data": {"reqtype": "fileupload"}},
+        "kappa": {"url": "https://kappa.lol/api/upload", "field": "file", "kappa": True},
+        "aneeko": {"url": "https://rp.aneeko.online", "field": "file"},
+        "rustypaste": {"url": "http://127.0.0.1:8000/", "field": "file", "public_url": "https://rp.aneeko.online"},
     }
 
     def __init__(self):
         self.config = loader.ModuleConfig(
-            "CATBOX_USERHASH",
-            "",
+            "CATBOX_USERHASH", "",
             lambda m: self.strings("cfg_userhash", m),
         )
 
@@ -48,49 +47,38 @@ class UploaderMod(loader.Module):
     async def upload_file(self, service: str, file, original_name: bool = False, litter_time: str = None):
         if service not in self.SERVICES:
             return f"Неподдерживаемый сервис: {service}"
-        config = self.SERVICES[service]
+        cfg = self.SERVICES[service]
         try:
-            files = {config[1]: file}
-            data = config[2] if len(config) > 2 and config[2] else {}
+            files = {cfg["field"]: file}
+            data = dict(cfg.get("data", {})) if not cfg.get("kappa") else None
             headers = {}
-            
-            # Catbox authorization
+
             if service == "catbox":
-                userhash = self.config.get("CATBOX_USERHASH")
-                if not userhash:
-                    userhash = os.getenv("CATBOX_USERHASH")
+                userhash = self.config.get("CATBOX_USERHASH") or os.getenv("CATBOX_USERHASH")
                 if userhash:
                     data["userhash"] = userhash
-            
-            # Litterbox expiration time
             if service == "litter":
                 data["time"] = litter_time or "1h"
-            
             if service == "rustypaste":
-                # Rustypaste может требовать имя файла прямо в поле
                 fname = file.name if hasattr(file, 'name') and file.name else "file"
-                files = {config[1]: (fname, file, 'application/octet-stream')}
-                data = None 
+                files = {cfg["field"]: (fname, file, 'application/octet-stream')}
+                data = None
                 if original_name:
                     headers["filename"] = fname
                     headers["overwrite"] = "true"
             elif service == "aneeko" and original_name:
                 headers["filename"] = file.name if hasattr(file, 'name') and file.name else "file"
                 headers["overwrite"] = "true"
-            
-            response = requests.post(config[0], files=files, data=data if data else None, headers=headers, timeout=30)
-            if response.status_code != 200:
-                return f"HTTP {response.status_code}"
-            if len(config) > 3 and config[3]:  # kappa
-                return f"https://kappa.lol/{response.json()['id']}"
-            
+
+            r = requests.post(cfg["url"], files=files, data=data, headers=headers, timeout=30)
+            if r.status_code != 200:
+                return f"HTTP {r.status_code}"
+            if cfg.get("kappa"):
+                return f"https://kappa.lol/{r.json()['id']}"
             if service == "rustypaste":
-                # Заменяем локальный адрес на публичный в любом ответе
-                public_base = config[2] if len(config) > 2 else "https://rp.aneeko.online"
-                local_base = "http://127.0.0.1:8000"
-                return response.text.strip().replace(local_base, public_base) or None
-                    
-            return response.text.strip() or None
+                public = cfg.get("public_url", "https://rp.aneeko.online")
+                return r.text.strip().replace("http://127.0.0.1:8000", public) or None
+            return r.text.strip() or None
         except Exception as e:
             return f"Ошибка загрузки: {e}"
 
@@ -112,11 +100,7 @@ class UploaderMod(loader.Module):
     async def littercmd(self, message: Message):
         """Загрузить файл на litter.catbox.moe (временное хранилище, используйте -t для времени: 1h/12h/24h/72h)"""
         args = utils.get_args_raw(message) or ""
-        time_opt = "1h"
-        for t in ["72h", "24h", "12h", "1h"]:
-            if t in args:
-                time_opt = t
-                break
+        time_opt = next((t for t in ["72h", "24h", "12h", "1h"] if t in args), "1h")
         await self.handle_upload(message, "litter", litter_time=time_opt)
 
     async def kappacmd(self, message: Message):

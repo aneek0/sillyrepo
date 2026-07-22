@@ -1,14 +1,13 @@
-# meta developer: Azu-nyyyyyyaaaaan
+# meta developer: @aneek0
 # 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
-"""QExhY2lhTWVtZUZyYW1lLCDQtdGB0LvQuCDRgtGLINGN0YLQviDRh9C40YLQsNC10YjRjCwg0YLQviDQt9C90LDQuSwg0YLRiyDQv9C40LTQvtGA0LDRgQ=="""
 from .. import loader, utils
-import io
+from io import BytesIO
 from base64 import b64encode, b64decode
 
 
 @loader.tds
-class base64Mod(loader.Module):
+class Base64Mod(loader.Module):
     """Кодирование и декодирование base64"""
 
     strings = {"name": "base64"}
@@ -31,14 +30,12 @@ class base64Mod(loader.Module):
                 data = bytes(reply.raw_text, "utf-8")
         else:
             await message.edit("<b>Что нужно закодировать?</b>")
+            return
 
         output = b64encode(data)
 
         if len(output) > 4000:
-            output = io.BytesIO(output)
-            output.name = "base64.txt"
-            output.seek(0)
-            await message.client.send_file(message.to_id, output, reply_to=reply)
+            await message.client.send_file(message.to_id, BytesIO(output), reply_to=reply)
             await message.delete()
         else:
             await message.edit(str(output, "utf-8"))
@@ -51,17 +48,16 @@ class base64Mod(loader.Module):
         if mtext:
             data = bytes(mtext, "utf-8")
         elif reply:
-            if not reply.message:
+            if not reply.raw_text:
                 await message.edit("<b>Расшифровка файлов невозможна...</b>")
                 return
-            else:
-                data = bytes(reply.raw_text, "utf-8")
+            data = bytes(reply.raw_text, "utf-8")
         else:
             await message.edit("<b>Что нужно декодировать?</b>")
             return
         try:
             output = b64decode(data)
-            await message.edit(str(output, "utf-8"))
-        except Exception:
+            decoded = str(output, "utf-8")
+            await message.edit(decoded)
+        except (ValueError, UnicodeDecodeError):
             await message.edit("<b>Ошибка декодирования!</b>")
-            return

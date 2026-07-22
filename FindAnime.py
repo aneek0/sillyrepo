@@ -1,9 +1,8 @@
-# meta developer: Azu-nyyyyyyaaaaan
+# meta developer: @aneek0
 # 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 
 import mimetypes
 import os
-import re
 import requests
 from .. import loader, utils
 
@@ -20,7 +19,6 @@ def format_anime_card(res):
     """Build formatted message from trace.moe + anilistInfo response."""
     anilist = res.get("anilist") or {}
     filename = res.get("filename", "")
-    name = filename.split(".")[0] if filename else "Неизвестно"
     similarity = res.get("similarity", 0)
     episode = res.get("episode")
     from_time = res.get("from")
@@ -98,6 +96,12 @@ def format_anime_card(res):
     if season and season_year:
         season_map = {"WINTER": "Winter", "SPRING": "Spring", "SUMMER": "Summer", "FALL": "Fall"}
         lines.append(f"🌤 {season_map.get(season, season)} {season_year}")
+
+    # Status
+    if status:
+        st_map = {"FINISHED": "Finished", "RELEASING": "Airing", "NOT_YET_RELEASED": "Not yet released",
+                   "CANCELLED": "Cancelled", "HIATUS": "Hiatus"}
+        lines.append(f"📌 {st_map.get(status, status)}")
 
     # Similarity
     lines.append(f"🤨 <b>Похоже на:</b> <code>{similarity * 100:.1f}%</code>")
@@ -181,9 +185,7 @@ class animetoolsMod(loader.Module):
         if not media:
             return await utils.answer(message, self.strings["reply"])
 
-        if msg.photo:
-            filename = "photo.png"
-        elif msg.video:
+        if msg.video:
             filename = "video.mp4"
         elif msg.gif:
             filename = "gif.gif"
@@ -191,7 +193,7 @@ class animetoolsMod(loader.Module):
             filename = "photo.png"
 
         filename = await self.client.download_media(media, file=filename)
-        typem, encoding = mimetypes.guess_type(filename)
+        typem, _ = mimetypes.guess_type(filename)
 
         try:
             r = requests.post(
@@ -200,7 +202,7 @@ class animetoolsMod(loader.Module):
                 headers={"Content-Type": typem},
                 timeout=15,
             ).json()
-        except Exception as e:
+        except Exception:
             await loading.delete()
             return await utils.answer(message, self.strings["error"])
         finally:
