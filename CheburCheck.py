@@ -1,24 +1,65 @@
 # meta developer: @aneek0
 # 🔐 This code is licensed under CC-BY-NC Licence! - https://creativecommons.org/licenses/by-nc/4.0/
 #
-# Модуль для получения данных с https://cheburcheck.ru (проверка блокировок РКН,
-# IP, подмены DNS и т.д.)
+# Модуль для получения данных с https://cheburcheck.ru — проверка блокировок РКН,
+# IP, CDN, подмены DNS и региональных провайдеров (TSPU/DPI).
 
-import asyncio
+import json
 
 import aiohttp
 
 from .. import loader, utils
 
+API = "https://cheburcheck.ru/api/v1"
 
-async def _fetch(target: str) -> dict:
-    """Запрос к API cheburcheck."""
-    url = f"https://cheburcheck.ru/api/v1/check?target={target}"
+VERDICTS = {
+    "tspu_block": "🧱 TSPU-блокировка",
+    "sni_block": "🚫 SNI-блокировка",
+    "dns_spoofing": "🌀 Подмена DNS",
+    "whitelist": "✅ Белый список",
+    "cdn_block": "☁️ Блокировка CDN",
+    "ok": "🟢 Всё ок",
+    "uncertain": "❓ Неопределённо",
+}
+
+
+async def _check(target: str) -> dict:
+    """Основная проверка (реестр РКН, IP, гео, CDN)."""
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(total=20)) as resp:
+        async with session.get(
+            f"{API}/check",
+            params={"target": target},
+            timeout=aiohttp.ClientTimeout(total=20),
+        ) as resp:
             if resp.status != 200:
                 raise RuntimeError(f"HTTP {resp.status}")
             return await resp.json()
+
+
+async def _probe(check_id: str) -> list:
+    """Динамические пробы по регионам/провайдерам через SSE-стрим."""
+    results = []
+    async with aiohttp.ClientSession() as session:
+        async with session.get(
+            f"{API}/probe/{check_id}", timeout=aiohttp.ClientTimeout(total=90)
+        ) as resp:
+            if resp.status != 200:
+                return results
+            async for raw in resp.content:
+                line = raw.decode(errors="ignore").strip()
+                if line.startswith("data:"):
+                    try:
+                        data = json.loads(line[5:].strip())
+                    except (ValueError, TypeError):
+                        continue
+                    if isinstance(data, dict) and "probe_id" in data:
+                        results.append(data)
+    return results
+
+
+def _verdicts_of_probe(probe: dict) -> str:
+    vs = probe.get("verdicts") or []
+    return " + ".join(VERDICTS.get(v, v) for v in vs) or "—"
 
 
 def _fmt_rkn_status(data: dict) -> str:
@@ -69,7 +110,7 @@ def _fmt(target: str, data: dict) -> str:
     wl = data.get("whitelist")
     if wl:
         lines.append(
-            f"✅ <b>В белом списке:</b> <code>{wl.get('domain')}</code> (рейтинг {wl.get('rank')}, последняя проверка {wl.get('last_ok', '?')[:10]})"
+            f"✅ <b>В белом списке:</b> <code>{wl.get('domain')}</code> (рейтинг {wl.get('rank')})"
         )
 
     if data.get("reverse_lookup"):
@@ -82,6 +123,17 @@ def _fmt(target: str, data: dict) -> str:
     return "\n".join(lines)
 
 
+def _fmt_probes(probes: list) -> str:
+    if not probes:
+        return ""
+    lines = ["", "📡 <b>Проверка по регионам:</b>"]
+    for p in sorted(probes, key=lambda x: x.get("probe_id", "")):
+        lines.append(
+            f"• <b>{p.get('region', '?')}</b> · {p.get('provider', '?')} ({p.get('asn', '?')}): {_verdicts_of_probe(p)}"
+        )
+    return "\n".join(lines)
+
+
 @loader.tds
 class CheburCheckMod(loader.Module):
     """Проверка доменов/IP на блокировки РКН через cheburcheck.ru"""
@@ -90,27 +142,57 @@ class CheburCheckMod(loader.Module):
         "name": "CheburCheck",
         "no_args": "🚫 Укажи домен или IP: <code>.rkn youtube.com</code>",
         "loading": "⏳ Проверяю...",
+        "probing": "📡 Запускаю региональные пробы...",
         "error": "❎ Ошибка при обращении к API. Попробуй позже.",
     }
 
-    async def rkncmd(self, message):
-        """.rkn <домен или IP>
-        Проверить блокировки РКН, IP, CDN и подмену DNS
-        """
+    async def _get_target(self, message):
         target = utils.get_args_raw(message)
         if not target:
-            return await utils.answer(message, self.strings("no_args"))
+            await utils.answer(message, self.strings("no_args"))
+            return None
+        return target.strip().rstrip("/")
 
-        target = target.strip().lstrip("h").rstrip("/")
-        if target.startswith("ttp"):
-            target = "ht" + target
+    @loader.unrestricted
+    async def rkncmd(self, message):
+        """.rkn <домен или IP>
+        Проверить блокировки РКН, IP, CDN
+        """
+        target = await self._get_target(message)
+        if not target:
+            return
 
         loading = await utils.answer(message, self.strings("loading"))
         try:
-            data = await _fetch(target)
+            data = await _check(target)
         except Exception:
             await loading.delete()
             return await utils.answer(message, self.strings("error"))
 
         await loading.delete()
         await utils.answer(message, _fmt(target, data))
+
+    @loader.unrestricted
+    async def rknpcmd(self, message):
+        """.rknp <домен или IP>
+        Полная проверка: РКН + региональные пробы (TSPU/SNI/подмена DNS)
+        """
+        target = await self._get_target(message)
+        if not target:
+            return
+
+        loading = await utils.answer(message, self.strings("loading"))
+        try:
+            data = await _check(target)
+        except Exception:
+            await loading.delete()
+            return await utils.answer(message, self.strings("error"))
+
+        await loading.edit(self.strings("probing"))
+        try:
+            probes = await _probe(data["id"])
+        except Exception:
+            probes = []
+
+        await loading.delete()
+        await utils.answer(message, _fmt(target, data) + _fmt_probes(probes))
