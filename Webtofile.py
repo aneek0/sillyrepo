@@ -8,7 +8,7 @@ from .. import loader, utils
 
 @loader.tds
 class Web2fileMod(loader.Module):
-    strings = {"name": "Web2file"}
+    strings = {"name": "Webtofile"}
 
     async def wtfcmd(self, message: Message):
         website = utils.get_args_raw(message)

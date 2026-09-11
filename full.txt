@@ -25,7 +25,6 @@ DrochBot
 Keysw
 HikariChat
 Daresponder
-ScreenshotAPI
 MyUsernames
 Membersquery
 IpChecker
@@ -54,7 +53,6 @@ TempMail
 FindAnime
 Spoilers
 AzuAI
-RpG
 InlineCoin
 full.txt
 WebShot
