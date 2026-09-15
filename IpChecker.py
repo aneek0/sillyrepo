@@ -414,17 +414,15 @@ class IpCheckerMod(loader.Module):
         if not _is_ip(target):
             resolved = await _resolve(target)
             if resolved is None:
-                await loading.delete()
                 return await utils.answer(
-                    message,
+                    loading,
                     self.strings("domain_not_found").format(
                         domain=target if len(target) <= 10 else target[:10] + "…"
                     ),
                 )
             if isinstance(resolved, list):
-                await loading.delete()
                 return await utils.answer(
-                    message,
+                    loading,
                     self.strings("multi_ip").format(
                         domain=target,
                         ips="\n".join(f"<code>{ip}</code>" for ip in resolved),
@@ -455,8 +453,7 @@ class IpCheckerMod(loader.Module):
                 )
             sections.extend(results)
 
-        await loading.delete()
-        await utils.answer(message, "\n".join(sections))
+        await utils.answer(loading, "\n".join(sections))
 
     # ---------------------------------------------------------- LatencyLab
 
@@ -573,9 +570,8 @@ class IpCheckerMod(loader.Module):
                     if online is None or slug in online
                 ]
                 if not channels:
-                    await loading.delete()
                     return await utils.answer(
-                        message, self.strings("no_channels")
+                        loading, self.strings("no_channels")
                     )
 
                 result, req_id = await self._ll_start_multiscan(
@@ -584,11 +580,9 @@ class IpCheckerMod(loader.Module):
                 if req_id:
                     result = await self._ll_poll_job(session, req_id)
         except PermissionError:
-            await loading.delete()
-            return await utils.answer(message, self.strings("invalid_key"))
+            return await utils.answer(loading, self.strings("invalid_key"))
         except Exception as e:
-            await loading.delete()
-            return await utils.answer(message, self.strings("error").format(e))
+            return await utils.answer(loading, self.strings("error").format(e))
 
         by_slug = {
             ch.get("operator"): ch for ch in (result.get("results") or [])
@@ -611,8 +605,7 @@ class IpCheckerMod(loader.Module):
                 f"<b>{name}:</b> ICMP {icmp} | {_tcp_label(ch)} {tcp}"
             )
 
-        await loading.delete()
-        await utils.answer(message, "\n".join(rows))
+        await utils.answer(loading, "\n".join(rows))
 
     @loader.unrestricted
     async def bslcmd(self, message):
@@ -654,11 +647,9 @@ class IpCheckerMod(loader.Module):
                 except Exception:
                     pass
         except PermissionError:
-            await loading.delete()
-            return await utils.answer(message, self.strings("invalid_key"))
+            return await utils.answer(loading, self.strings("invalid_key"))
         except Exception as e:
-            await loading.delete()
-            return await utils.answer(message, self.strings("error").format(e))
+            return await utils.answer(loading, self.strings("error").format(e))
 
         window = res.get("window") or {}
         day = res.get("day") or {}
@@ -682,8 +673,7 @@ class IpCheckerMod(loader.Module):
                     f"<b>Онлайн:</b> {_op_names(ops_online)}"
                 )
 
-        await loading.delete()
-        await utils.answer(message, "\n".join(lines))
+        await utils.answer(loading, "\n".join(lines))
 
     @loader.unrestricted
     async def vpncmd(self, message):
@@ -727,11 +717,9 @@ class IpCheckerMod(loader.Module):
                     raise RuntimeError("Не удалось получить ID задачи")
                 result = await self._ll_poll_job(session, req_id)
         except PermissionError:
-            await loading.delete()
-            return await utils.answer(message, self.strings("invalid_key"))
+            return await utils.answer(loading, self.strings("invalid_key"))
         except Exception as e:
-            await loading.delete()
-            return await utils.answer(message, self.strings("error").format(e))
+            return await utils.answer(loading, self.strings("error").format(e))
 
         label = result.get("label", "")
         target = result.get("target", "")
@@ -760,8 +748,7 @@ class IpCheckerMod(loader.Module):
                 f"<b>{name}:</b> {round(ms) if ms is not None else '—'}ms"
             )
 
-        await loading.delete()
-        await utils.answer(message, "\n".join(rows))
+        await utils.answer(loading, "\n".join(rows))
 
     @loader.unrestricted
     async def sncmd(self, message):
@@ -797,11 +784,9 @@ class IpCheckerMod(loader.Module):
                 if req_id:
                     result = await self._ll_poll_job(session, req_id)
         except PermissionError:
-            await loading.delete()
-            return await utils.answer(message, self.strings("invalid_key"))
+            return await utils.answer(loading, self.strings("invalid_key"))
         except Exception as e:
-            await loading.delete()
-            return await utils.answer(message, self.strings("error").format(e))
+            return await utils.answer(loading, self.strings("error").format(e))
 
         norm_target = result.get("target", target)
         first = (result.get("results") or [{}])[0]
@@ -830,5 +815,4 @@ class IpCheckerMod(loader.Module):
                 f" | {_tcp_label(ch)} {ch.get('tcp_alive', 0)}/{wire_tcp}"
             )
 
-        await loading.delete()
-        await utils.answer(message, "\n".join(rows))
+        await utils.answer(loading, "\n".join(rows))

@@ -166,11 +166,9 @@ class CheburCheckMod(loader.Module):
         try:
             data = await _check(target)
         except Exception:
-            await loading.delete()
-            return await utils.answer(message, self.strings("error"))
+            return await utils.answer(loading, self.strings("error"))
 
-        await loading.delete()
-        await utils.answer(message, _fmt(target, data))
+        await utils.answer(loading, _fmt(target, data))
 
     @loader.unrestricted
     async def rknpcmd(self, message):
@@ -185,8 +183,7 @@ class CheburCheckMod(loader.Module):
         try:
             data = await _check(target)
         except Exception:
-            await loading.delete()
-            return await utils.answer(message, self.strings("error"))
+            return await utils.answer(loading, self.strings("error"))
 
         await loading.edit(self.strings("probing"))
         try:
@@ -194,5 +191,4 @@ class CheburCheckMod(loader.Module):
         except Exception:
             probes = []
 
-        await loading.delete()
-        await utils.answer(message, _fmt(target, data) + _fmt_probes(probes))
+        await utils.answer(loading, _fmt(target, data) + _fmt_probes(probes))

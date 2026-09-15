@@ -203,25 +203,20 @@ class animetoolsMod(loader.Module):
                 timeout=15,
             ).json()
         except Exception:
-            await loading.delete()
-            return await utils.answer(message, self.strings["error"])
+            return await utils.answer(loading, self.strings["error"])
         finally:
             if os.path.exists(filename):
                 os.remove(filename)
 
         if r.get("error"):
-            await loading.delete()
-            return await utils.answer(message, f"❎ trace.moe: {r['error']}")
+            return await utils.answer(loading, f"❎ trace.moe: {r['error']}")
 
         if not r.get("result"):
-            await loading.delete()
-            return await utils.answer(message, self.strings["no_results"])
+            return await utils.answer(loading, self.strings["no_results"])
 
         res = r["result"][0]
         caption, cover_url = format_anime_card(res)
         video = res.get("video")
-
-        await loading.delete()
 
         # Try to send with video preview, fallback to text
         if video:
