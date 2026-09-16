@@ -75,10 +75,22 @@ def _fmt_rkn_status(data: dict) -> str:
 def _fmt_cdn(data: dict) -> str:
     if not data.get("cdn_providers"):
         return "не найдено (риск блокировки по IP)"
-    return ", ".join(
-        f"{k}: {', '.join(v) if isinstance(v, list) else v}"
-        for k, v in data["cdn_providers"].items()
-    )
+
+    parts = []
+    for k, v in data["cdn_providers"].items():
+        if isinstance(v, list):
+            if v and isinstance(v[0], dict):
+                cidrs = ", ".join(
+                    c.get("cidr", "?") for c in v if isinstance(c, dict)
+                )
+                parts.append(f"{k}: {cidrs}")
+            else:
+                parts.append(f"{k}: {', '.join(map(str, v))}")
+        elif isinstance(v, dict):
+            parts.append(f"{k}: {v.get('cidr', v)}")
+        else:
+            parts.append(f"{k}: {v}")
+    return ", ".join(parts)
 
 
 def _fmt(target: str, data: dict) -> str:
