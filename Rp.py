@@ -24,7 +24,6 @@ class Rp(loader.Module):
     GROUP_RE = re.compile(r"(?<![\d-])3[\s-]*ОТС[\s-]*1(?![\d-])", re.IGNORECASE)
     GROUP_ID = "3-ОТС-1"
     DATE_RE = re.compile(r"(\d{1,2})\s+([а-яё]+)\s+(\d{4})\s*г?", re.IGNORECASE)
-    WEEKDAY_RE = re.compile(r"(?:,|\s)\s*(понедельник|вторник|среда|четверг|пятница|суббота|воскресенье)\b", re.IGNORECASE)
     PAIR_LABEL_RE = re.compile(r"^\s*(\d{1,2})\s*пара\s*$")
     CLASS_HOUR_RE = re.compile(r"класс[сн]\.??\s*час", re.IGNORECASE)
     TIME_SLOT_RE = re.compile(
@@ -34,26 +33,15 @@ class Rp(loader.Module):
     GROUP_TOKEN_RE = re.compile(r"\d{1,2}-[А-ЯЁ]{2,5}-\d{1,2}")
     OTHER_GROUP_RE = re.compile(r"(?<![\d-])\d[\s-]*[А-ЯЁ]{2,}[\s-]*\d(?![\d-])", re.IGNORECASE)
 
-    regular_pair_times = {
-        "1": ("08:30", "09:40"),
-        "2": ("09:50", "11:00"),
-        "3": ("11:10", "12:20"),
-        "4": ("12:30", "13:40"),
-        "5": ("13:50", "15:00"),
-        "6": ("15:10", "16:20"),
-        "7": ("16:30", "17:40"),
-        "8": ("17:50", "19:00"),
-    }
-
-    monday_pair_times = {
+    pair_times = {
         "классный_час": ("08:30", "09:10"),
-        "1": ("09:10", "10:20"),
-        "2": ("10:30", "11:40"),
-        "3": ("11:50", "13:00"),
-        "4": ("13:10", "14:20"),
-        "5": ("14:30", "15:40"),
-        "6": ("15:50", "17:00"),
-        "7": ("17:10", "18:20"),
+        "1": ("09:10", "10:10"),
+        "2": ("10:20", "11:20"),
+        "3": ("11:30", "12:30"),
+        "4": ("12:40", "13:40"),
+        "5": ("13:50", "14:50"),
+        "6": ("15:00", "16:00"),
+        "7": ("16:10", "17:10"),
     }
 
     async def rpcmd(self, message):
@@ -62,16 +50,14 @@ class Rp(loader.Module):
         try:
             data = await self._fetch_pdf("schedule")
             full_text = self._pdf_text(data)
-            date, is_monday = self._parse_date(full_text)
-            pair_times = self.monday_pair_times if is_monday else self.regular_pair_times
-            pairs = self._extract_pairs(data, pair_times, is_monday)
+            date = self._parse_date(full_text)
+            pairs = self._extract_pairs(data)
             if not pairs:
                 await utils.answer(message, self.strings["no_schedule"])
                 return
-            day_info = " (понедельник - с классным часом)" if is_monday else ""
             await utils.answer(
                 message,
-                self.strings["schedule_found"].format(date=date + day_info, pairs="\n".join(pairs)),
+                self.strings["schedule_found"].format(date=date, pairs="\n".join(pairs)),
             )
         except Exception as e:
             await utils.answer(message, f"<emoji document_id=5210952531676504517>❌</emoji> Ошибка: {e}")
@@ -172,34 +158,26 @@ class Rp(loader.Module):
             doc.close()
 
     def _parse_date(self, text):
-        """(строка даты, понедельник ли) из текста PDF. Fallback - локальная дата."""
+        """Строка даты из текста PDF. Fallback - локальная дата."""
         head = text[:400]
         m = self.DATE_RE.search(head)
-        if m:
-            wd_m = self.WEEKDAY_RE.search(head[m.start():m.start() + 120] if m.start() < 120 else head)
-            weekday = wd_m.group(1).lower() if wd_m else ""
-        else:
+        if not m:
             # дата может быть в таблице, ищем по всему тексту
             m = self.DATE_RE.search(text)
-            weekday = ""
-        is_monday = "понедельник" in weekday
         if m:
-            date = f"{m.group(1)} {m.group(2).lower()} {m.group(3)}"
-        else:
-            import datetime
+            return f"{m.group(1)} {m.group(2).lower()} {m.group(3)}"
+        import datetime
 
-            now = datetime.date.today()
-            months = [
-                "января", "февраля", "марта", "апреля", "мая", "июня", "июля",
-                "августа", "сентября", "октября", "ноября", "декабря",
-            ]
-            date = f"{now.day} {months[now.month - 1]} {now.year}"
-            is_monday = now.weekday() == 0
-        return date, is_monday
+        now = datetime.date.today()
+        months = [
+            "января", "февраля", "марта", "апреля", "мая", "июня", "июля",
+            "августа", "сентября", "октября", "ноября", "декабря",
+        ]
+        return f"{now.day} {months[now.month - 1]} {now.year}"
 
     # ---------- расписание ----------
 
-    def _extract_pairs(self, data, pair_times, is_monday):
+    def _extract_pairs(self, data):
         """Основной путь: таблицы PDF. Fallback: текстовая разметка."""
         pairs = []
         try:
@@ -207,7 +185,7 @@ class Rp(loader.Module):
             try:
                 for page in doc:
                     for table in page.find_tables().tables:
-                        pairs.extend(self._pairs_from_table(table.extract(), pair_times, is_monday))
+                        pairs.extend(self._pairs_from_table(table.extract()))
                         if pairs:
                             break
                     if pairs:
@@ -217,10 +195,10 @@ class Rp(loader.Module):
         except Exception:
             pass
         if not pairs:
-            pairs = self._pairs_from_text(self._pdf_text(data), data, pair_times, is_monday)
+            pairs = self._pairs_from_text(self._pdf_text(data), data)
         return pairs
 
-    def _pairs_from_table(self, rows, pair_times, is_monday):
+    def _pairs_from_table(self, rows):
         pairs = []
         if not rows:
             return pairs
@@ -228,9 +206,8 @@ class Rp(loader.Module):
         gi = next((i for i, h in enumerate(header) if self.GROUP_RE.fullmatch(h)), None)
         if gi is None:
             return pairs
-        if is_monday:
-            ct = pair_times["классный_час"]
-            pairs.append(f"Классный час ({ct[0]}-{ct[1]})")
+        ct = self.pair_times["классный_час"]
+        pairs.append(f"Классный час ({ct[0]}-{ct[1]})")
         for row in rows[1:]:
             label = (row[0] or "").strip()
             if self.CLASS_HOUR_RE.search(label):
@@ -243,16 +220,15 @@ class Rp(loader.Module):
             if not info:
                 continue
             pn = m.group(1)
-            pt = pair_times.get(pn, ("время", "неизвестно"))
+            pt = self.pair_times.get(pn, ("время", "неизвестно"))
             pairs.append(f"{pn} пара ({pt[0]}-{pt[1]}): {info}")
         return pairs
 
-    def _pairs_from_text(self, text, data, pair_times, is_monday):
+    def _pairs_from_text(self, text, data):
         """Fallback: колонки по заголовкам групп + строки 'N пара' по геометрии слов."""
         pairs = []
-        if is_monday:
-            ct = pair_times["классный_час"]
-            pairs.append(f"Классный час ({ct[0]}-{ct[1]})")
+        ct = self.pair_times["классный_час"]
+        pairs.append(f"Классный час ({ct[0]}-{ct[1]})")
         try:
             doc = pymupdf.open(stream=data, filetype="pdf")
         except Exception:
@@ -302,7 +278,7 @@ class Rp(loader.Module):
                     info = self._format_pair_info(" ".join(t[4] for t in lines))
                     if not info:
                         continue
-                    pt = pair_times.get(num, ("время", "неизвестно"))
+                    pt = self.pair_times.get(num, ("время", "неизвестно"))
                     pairs.append(f"{num} пара ({pt[0]}-{pt[1]}): {info}")
         finally:
             doc.close()
