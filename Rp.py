@@ -34,7 +34,6 @@ class Rp(loader.Module):
     OTHER_GROUP_RE = re.compile(r"(?<![\d-])\d[\s-]*[А-ЯЁ]{2,}[\s-]*\d(?![\d-])", re.IGNORECASE)
 
     pair_times = {
-        "классный_час": ("08:30", "09:10"),
         "1": ("09:10", "10:10"),
         "2": ("10:20", "11:20"),
         "3": ("11:30", "12:30"),
@@ -206,8 +205,6 @@ class Rp(loader.Module):
         gi = next((i for i, h in enumerate(header) if self.GROUP_RE.fullmatch(h)), None)
         if gi is None:
             return pairs
-        ct = self.pair_times["классный_час"]
-        pairs.append(f"Классный час ({ct[0]}-{ct[1]})")
         for row in rows[1:]:
             label = (row[0] or "").strip()
             if self.CLASS_HOUR_RE.search(label):
@@ -227,8 +224,6 @@ class Rp(loader.Module):
     def _pairs_from_text(self, text, data):
         """Fallback: колонки по заголовкам групп + строки 'N пара' по геометрии слов."""
         pairs = []
-        ct = self.pair_times["классный_час"]
-        pairs.append(f"Классный час ({ct[0]}-{ct[1]})")
         try:
             doc = pymupdf.open(stream=data, filetype="pdf")
         except Exception:
