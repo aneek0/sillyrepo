@@ -22,8 +22,8 @@ class UploaderMod(loader.Module):
         "catbox": {"url": "https://catbox.moe/user/api.php", "field": "fileToUpload", "data": {"reqtype": "fileupload"}},
         "litter": {"url": "https://litterbox.catbox.moe/resources/internals/api.php", "field": "fileToUpload", "data": {"reqtype": "fileupload"}},
         "kappa": {"url": "https://kappa.lol/api/upload", "field": "file", "kappa": True},
-        "aneeko": {"url": "https://rp.aneeko.online", "field": "file"},
-        "rustypaste": {"url": "http://127.0.0.1:8000/", "field": "file", "public_url": "https://rp.aneeko.online"},
+        "aneeko": {"url": "https://rp.aneeko.qzz.io", "field": "file"},
+        "rustypaste": {"url": "http://127.0.0.1:8000/", "field": "file", "public_url": "https://rp.aneeko.qzz.io"},
     }
 
     def __init__(self):
@@ -76,7 +76,7 @@ class UploaderMod(loader.Module):
             if cfg.get("kappa"):
                 return f"https://kappa.lol/{r.json()['id']}"
             if service == "rustypaste":
-                public = cfg.get("public_url", "https://rp.aneeko.online")
+                public = cfg.get("public_url", "https://rp.aneeko.qzz.io")
                 return r.text.strip().replace("http://127.0.0.1:8000", public) or None
             return r.text.strip() or None
         except Exception as e:
@@ -108,7 +108,7 @@ class UploaderMod(loader.Module):
         await self.handle_upload(message, "kappa")
 
     async def aneekocmd(self, message: Message):
-        """Загрузить файл на rp.aneeko.online (используйте -n для сохранения имени)"""
+        """Загрузить файл на rp.aneeko.qzz.io (используйте -n для сохранения имени)"""
         original_name = "-n" in (utils.get_args_raw(message) or "")
         await self.handle_upload(message, "aneeko", original_name)
 
