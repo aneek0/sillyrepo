@@ -416,6 +416,9 @@ class AzuAIMod(loader.Module):
         if not model:
             await utils.answer(message, self.strings["no_model"])
             return
+        # Config may store a numeric-named model as int (e.g. "1") — API
+        # requires a string, so coerce before use
+        model = str(model)
 
         await utils.answer(message, self.strings["thinking"])
 
@@ -499,6 +502,8 @@ class AzuAIMod(loader.Module):
         )
 
     async def _cb_select_model(self, call: InlineCall, model: str):
-        self.config["AI_MODEL"] = model
+        # ast.literal_eval in ConfigValue turns "1" into int 1, which the API
+        # rejects with 400 "model: expected string, received number" — coerce
+        self.config["AI_MODEL"] = str(model)
         await call.edit(self.strings["model_selected"].format(model))
         await call.answer(f"Модель: {model}")
