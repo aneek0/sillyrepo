@@ -258,6 +258,10 @@ class AzuAIMod(loader.Module):
         if not reply:
             return None, False
 
+        quote_text = getattr(message.reply_to, "quote_text", None)
+        if quote_text:
+            return quote_text, False
+
         if reply.message:
             return reply.message, False
 
