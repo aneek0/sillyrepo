@@ -553,24 +553,13 @@ class AzuAIMod(loader.Module):
 
         chat_id = utils.get_chat_id(message)
 
-        # Progress + answer via the userbot account itself, the same way
-        # Pinger renders: utils.answer edits our outgoing .ask message, then
-        # client.edit_rich_message replaces it with a native rich message.
-        # This works in every chat (PMs included) and needs no inline bot.
-        await utils.answer(message, self.strings["thinking"])
-
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
         body = self._format_answer(args, answer, model, vision_skipped)
 
-        try:
-            await message.client.edit_rich_message(
-                message.peer_id, message, markdown=body
-            )
-        except Exception:
-            logger.warning(
-                "Rich edit in %s failed; plain-text fallback", chat_id, exc_info=True
-            )
-            await utils.answer(message, body[:4000], parse_mode=None)
+        # Same delivery as Pinger: for own outgoing messages utils.answer edits
+        # the command in place, and the framework turns the text into a native
+        # rich message (premium account). Works in PMs, no inline bot needed.
+        await utils.answer(message, body)
 
     async def chatcmd(self, message):
         """.chat — включить/выключить режим контекста"""
