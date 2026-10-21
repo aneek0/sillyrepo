@@ -3,6 +3,7 @@
 import asyncio
 import base64
 import json
+import logging
 import os
 import re
 import urllib.error
@@ -11,6 +12,10 @@ from openai import AsyncOpenAI
 
 from .. import loader, utils
 from ..inline.types import InlineCall
+
+
+logger = logging.getLogger(__name__)
+
 
 SYSTEM_PROMPT = (
     "Answer in GitHub-flavored Markdown. Never wrap the whole answer in a code block "
@@ -404,21 +409,33 @@ class AzuAIMod(loader.Module):
 
             msg = response.choices[0].message
 
-            # Handle tool calls
+            # Handle tool calls. The proxy may hand back calls we never declared
+            # (e.g. bash); every call still needs a matching tool message or the
+            # follow-up request is rejected. Pass a plain dict too: the SDK's
+            # message objects fail to serialize on some OpenAI-compatible APIs.
             if msg.tool_calls:
-                tool_results = []
+                messages.append({
+                    "role": "assistant",
+                    "content": msg.content or "",
+                    "tool_calls": [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                        }
+                        for tc in msg.tool_calls
+                    ],
+                })
                 for tc in msg.tool_calls:
                     if tc.function.name == "web_search":
-                        args = json.loads(tc.function.arguments)
+                        try:
+                            args = json.loads(tc.function.arguments or "{}")
+                        except json.JSONDecodeError:
+                            args = {}
                         result = await self._web_search(args.get("query", ""))
-                        tool_results.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": result,
-                        })
-
-                messages.append(msg)
-                messages.extend(tool_results)
+                    else:
+                        result = f"Инструмент {tc.function.name!r} недоступен."
+                    messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
                 response2 = await asyncio.wait_for(
                     client.chat.completions.create(
@@ -517,7 +534,7 @@ class AzuAIMod(loader.Module):
                 chat_id, self.strings["thinking"], message_thread_id=topic_id
             )
         except Exception:
-            pass
+            logger.debug("Inline bot could not post the progress message", exc_info=True)
 
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
         body = self._format_answer(args, answer, model, vision_skipped)
@@ -533,7 +550,7 @@ class AzuAIMod(loader.Module):
                     chat_id, markdown=body, message_thread_id=topic_id
                 )
         except Exception:
-            pass
+            logger.debug("Rich answer delivery failed, falling back to the userbot", exc_info=True)
 
         if sent is not None:
             return
@@ -542,7 +559,7 @@ class AzuAIMod(loader.Module):
             try:
                 await status.delete()
             except Exception:
-                pass
+                logger.debug("Could not delete the progress message", exc_info=True)
 
         # Inline bot can't post here (e.g. not a member) — fall back to the userbot
         await utils.answer(message, body[:4000], parse_mode=None)
