@@ -74,6 +74,17 @@ def _strip_fences(text: str) -> str:
     match = re.fullmatch(r"\s*```(?:html|markdown|md)?[ \t]*\n(.*?)\n?```\s*", text, re.DOTALL)
     return match.group(1) if match else text
 
+def _message_text(msg) -> str:
+    """Visible answer text of a completion message.
+
+    Reasoning models (glm-5.3, o-series) sometimes return 200 with an empty
+    ``content`` and the text only in ``reasoning_content``. Take whichever
+    field carries text instead of rendering an empty answer.
+    """
+    return (msg.content or "").strip() or (
+        getattr(msg, "reasoning_content", None) or ""
+    ).strip()
+
 def _get_context_dir() -> str:
     # External modules are exec'd from source, so __file__ is undefined here;
     # the loader module's own path gives us the install root in both forks
@@ -445,9 +456,25 @@ class AzuAIMod(loader.Module):
                     ),
                     timeout=REQUEST_TIMEOUT,
                 )
-                answer = response2.choices[0].message.content or ""
+                answer = _message_text(response2.choices[0].message)
+                if not answer:
+                    # Empty 200 happens when the proxy cuts a reasoning answer
+                    # or the model keeps calling tools. Ask once more, plain.
+                    messages.append({
+                        "role": "user",
+                        "content": "Ответь на вопрос выше обычным текстом, без инструментов.",
+                    })
+                    response3 = await asyncio.wait_for(
+                        client.chat.completions.create(
+                            model=model,
+                            messages=messages,
+                            max_tokens=4096,
+                        ),
+                        timeout=REQUEST_TIMEOUT,
+                    )
+                    answer = _message_text(response3.choices[0].message)
             else:
-                answer = msg.content or ""
+                answer = _message_text(msg)
 
             # Update context
             if ctx.get("enabled"):
