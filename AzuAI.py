@@ -70,8 +70,15 @@ def _strip_fences(text: str) -> str:
     return match.group(1) if match else text
 
 def _get_context_dir() -> str:
-    # Heroku/Hikka data lives in the install root, not in ~/.hikka
-    base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "azuai_contexts")
+    # External modules are exec'd from source, so __file__ is undefined here;
+    # the loader module's own path gives us the install root in both forks
+    loader_file = getattr(loader, "__file__", None)
+    root = (
+        os.path.dirname(os.path.dirname(os.path.abspath(loader_file)))
+        if loader_file
+        else os.path.join(os.path.expanduser("~"), ".heroku")
+    )
+    base = os.path.join(root, "azuai_contexts")
     legacy = os.path.join(os.path.expanduser("~"), ".hikka", "azuai_contexts")
     if not os.path.isdir(base) and os.path.isdir(legacy):
         os.replace(legacy, base)
