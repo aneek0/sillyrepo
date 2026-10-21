@@ -34,6 +34,14 @@ _OBVIOUSLY_TEXT_ONLY = (
 _vision_cache: dict[str, bool] = {}
 
 
+def _topic_id(message) -> int | None:
+    """Forum topic id of the message, so bot replies stay in the same topic."""
+    reply_to = getattr(message, "reply_to", None)
+    if reply_to is None or not getattr(reply_to, "forum_topic", False):
+        return None
+    return reply_to.reply_to_top_id or reply_to.reply_to_msg_id
+
+
 def _escape_html(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
@@ -496,11 +504,14 @@ class AzuAIMod(loader.Module):
             return
 
         chat_id = utils.get_chat_id(message)
+        topic_id = _topic_id(message)
 
         # Progress message is posted by the inline bot, so the answer can be rich
         status = None
         try:
-            status = await self.inline.bot.send_message(chat_id, self.strings["thinking"])
+            status = await self.inline.bot.send_message(
+                chat_id, self.strings["thinking"], message_thread_id=topic_id
+            )
         except Exception:
             pass
 
@@ -514,7 +525,9 @@ class AzuAIMod(loader.Module):
                     html=html, chat_id=chat_id, message_id=status.id
                 )
             else:
-                sent = await self.inline.bot.send_rich_message(chat_id, html=html)
+                sent = await self.inline.bot.send_rich_message(
+                    chat_id, html=html, message_thread_id=topic_id
+                )
         except Exception:
             pass
 
