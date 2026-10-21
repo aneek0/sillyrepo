@@ -509,6 +509,13 @@ class AzuAIMod(loader.Module):
             parts.append("<p><b>⚠️ фото не отправлено — модель не поддерживает vision</b></p>")
         quoted_html = self._to_rich_html(quoted)
         parts.append(quoted_html)
+        model_html = self._to_rich_html(f"**〔{model}〕**")
+        parts.append("<hr>")
+        parts.append(f"<h4>{model_html}</h4>")
+        # The model answer itself is markdown; convert it too. It may embed
+        # raw HTML tags (the system prompt asks for GFM without HTML) — pass
+        # through as-is after conversion, markdown pkg keeps raw HTML blocks.
+        parts.append(self._to_rich_html(answer))
         return "\n\n".join(parts)
 
     @staticmethod
