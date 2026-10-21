@@ -552,50 +552,25 @@ class AzuAIMod(loader.Module):
             return
 
         chat_id = utils.get_chat_id(message)
-        topic_id = _topic_id(message)
 
-        # Progress message is posted by the inline bot, so the answer can be
-        # rich. In a chat where the inline bot has never started (a fresh PM
-        # with a contact) SendMessage as that bot raises, so fall back to a
-        # userbot reply right away instead of silently producing nothing.
-        status = None
-        try:
-            status = await self.inline.bot.send_message(
-                chat_id, self.strings["thinking"], message_thread_id=topic_id
-            )
-        except Exception:
-            logger.warning("Inline bot cannot post to %s; answering as userbot", chat_id, exc_info=True)
+        # Progress + answer via the userbot account itself, the same way
+        # Pinger renders: utils.answer edits our outgoing .ask message, then
+        # client.edit_rich_message replaces it with a native rich message.
+        # This works in every chat (PMs included) and needs no inline bot.
+        await utils.answer(message, self.strings["thinking"])
 
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
         body = self._format_answer(args, answer, model, vision_skipped)
 
-        sent = None
         try:
-            if status is not None:
-                sent = await self.inline.bot.edit_rich_message(
-                    markdown=body, chat_id=chat_id, message_id=status.id
-                )
-            else:
-                sent = await self.inline.bot.send_rich_message(
-                    chat_id, markdown=body, message_thread_id=topic_id
-                )
+            await message.client.edit_rich_message(
+                message.peer_id, message, markdown=body
+            )
         except Exception:
-            # edit_rich_message / send_rich_message raise for PMs where the
-            # inline bot never started a message; the userbot fallback below
-            # is the only delivery channel there.
-            logger.warning("Rich delivery to %s failed; answering as userbot", chat_id, exc_info=True)
-
-        if sent is not None:
-            return
-
-        if status is not None:
-            try:
-                await status.delete()
-            except Exception:
-                logger.debug("Could not delete the progress message", exc_info=True)
-
-        # Inline bot can't post here (e.g. not a member) — fall back to the userbot
-        await utils.answer(message, body[:4000], parse_mode=None)
+            logger.warning(
+                "Rich edit in %s failed; plain-text fallback", chat_id, exc_info=True
+            )
+            await utils.answer(message, body[:4000], parse_mode=None)
 
     async def chatcmd(self, message):
         """.chat — включить/выключить режим контекста"""
