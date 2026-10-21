@@ -556,10 +556,9 @@ class AzuAIMod(loader.Module):
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
         body = self._format_answer(args, answer, model, vision_skipped)
 
-        # Same delivery as Pinger: for own outgoing messages utils.answer edits
-        # the command in place, and the framework turns the text into a native
-        # rich message (premium account). Works in PMs, no inline bot needed.
-        await utils.answer(message, body)
+        # Same delivery as Pinger: for own outgoing messages the framework
+        # turns the text into a native rich message (rich=True), works in PMs.
+        await utils.answer(message, body, rich=True)
 
     async def chatcmd(self, message):
         """.chat — включить/выключить режим контекста"""
