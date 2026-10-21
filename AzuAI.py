@@ -12,15 +12,8 @@ from .. import loader, utils
 from ..inline.types import InlineCall
 
 SYSTEM_PROMPT = (
-    "Format all output as Telegram rich HTML: "
-    "<b>bold</b>, <i>italic</i>, <u>underline</u>, <s>strikethrough</s>, "
-    "<code>inline code</code>, <pre>code block</pre>, <a href='URL'>text</a>. "
-    "Structure long answers with rich blocks where useful: "
-    "<h1>-<h6> headings, <ul>/<ol> lists, <blockquote>, "
-    "<table><tr><th>..</th></tr><tr><td>..</td></tr></table>, "
-    "<details><summary>title</summary>body</details>, <hr/>, <tg-math>x^2</tg-math>. "
-    "Do NOT use Markdown syntax (no **, no __, no ``` fences) and never wrap the whole answer "
-    "in a code block. Use the web search tool when it would improve the answer."
+    "Answer in GitHub-flavored Markdown. Never wrap the whole answer in a code block "
+    "and never output HTML tags. Use the web search tool when it would improve the answer."
 )
 
 MAX_BUTTONS_PER_PAGE = 90
@@ -42,42 +35,17 @@ def _topic_id(message) -> int | None:
     return reply_to.reply_to_top_id or reply_to.reply_to_msg_id
 
 
-def _escape_html(text: str) -> str:
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-
-def _strip_html_fences(text: str) -> str:
-    """Models sometimes wrap the whole answer in ```html ... ``` despite instructions."""
-    match = re.fullmatch(r"\s*```(?:html)?[ \t]*\n(.*?)\n?```\s*", text, re.DOTALL)
+def _strip_fences(text: str) -> str:
+    """Models sometimes wrap the whole answer in a ```lang ... ``` block."""
+    match = re.fullmatch(r"\s*```(?:html|markdown|md)?[ \t]*\n(.*?)\n?```\s*", text, re.DOTALL)
     return match.group(1) if match else text
 
-
-_BASIC_TAG_MAP = {
-    "h1": "b", "h2": "b", "h3": "b", "h4": "b", "h5": "b", "h6": "b",
-    "summary": "b", "details": "b", "tg-reference": "i", "tg-math": "code",
-    "tg-math-block": "pre", "tg-time": "code",
-}
-
-
-def _basic_html(html: str) -> str:
-    """Downgrade rich HTML to the tags plain parse_mode='HTML' accepts."""
-    html = re.sub(r"<hr\s*/?>", "", html)
-    html = re.sub(r"<br\s*/?>", "\n", html)
-    html = re.sub(r"<img\b[^>]*>", "", html)
-    html = re.sub(r"<table[^>]*>|</table>|</?thead>|</?tbody>|<caption[^>]*>|</caption>", "", html)
-    html = re.sub(r"<tr[^>]*>", "", html)
-    html = re.sub(r"</tr>", "\n", html)
-    html = re.sub(r"<t[hd][^>]*>", " | ", html)
-    html = re.sub(r"</t[hd]>", "", html)
-    html = re.sub(r"(?m)^ *\| ", "", html)
-    for tag, basic in _BASIC_TAG_MAP.items():
-        html = re.sub(rf"<{tag}(?:\s[^>]*)?>", f"<{basic}>", html)
-        html = re.sub(rf"</{tag}>", f"</{basic}>", html)
-    return re.sub(r"\n{3,}", "\n\n", html).strip()
-
-
 def _get_context_dir() -> str:
-    base = os.path.join(os.path.expanduser("~"), ".hikka", "azuai_contexts")
+    # Heroku/Hikka data lives in the install root, not in ~/.hikka
+    base = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "azuai_contexts")
+    legacy = os.path.join(os.path.expanduser("~"), ".hikka", "azuai_contexts")
+    if not os.path.isdir(base) and os.path.isdir(legacy):
+        os.replace(legacy, base)
     os.makedirs(base, exist_ok=True)
     return base
 
@@ -446,21 +414,21 @@ class AzuAIMod(loader.Module):
 
 
     def _format_answer(self, question: str, answer: str, model: str, vision_skipped: bool) -> str:
-        """Question on top, rich answer below."""
+        """Question on top, rich markdown answer below."""
         question = question.strip()
         if len(question) > 1000:
             question = question[:1000] + "…"
 
-        answer = _strip_html_fences(answer).strip() or "⚠️ Пустой ответ"
+        answer = _strip_fences(answer).strip() or "⚠️ Пустой ответ"
         if len(answer) > 30000:
-            answer = answer[:30000] + "\n\n<i>…ответ обрезан</i>"
+            answer = answer[:30000] + "\n\n*…ответ обрезан*"
 
+        quoted = "\n".join(f"> {line}" if line else ">" for line in question.splitlines())
         parts = []
         if vision_skipped:
-            parts.append("<b>⚠️ фото не отправлено — модель не поддерживает vision</b>")
-        quoted = _escape_html(question).replace("\n", "<br>")
-        parts.append(f"<blockquote>❓ {quoted}</blockquote>")
-        parts.append(f"<hr/>\n<b>〔{_escape_html(model)}〕</b>\n\n{answer}")
+            parts.append("**⚠️ фото не отправлено — модель не поддерживает vision**")
+        parts.append(quoted)
+        parts.append(f"---\n\n**〔{model}〕**\n\n{answer}")
         return "\n\n".join(parts)
 
     # ── commands ──────────────────────────────────────────────────────────────
@@ -516,17 +484,17 @@ class AzuAIMod(loader.Module):
             pass
 
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
-        html = self._format_answer(args, answer, model, vision_skipped)
+        body = self._format_answer(args, answer, model, vision_skipped)
 
         sent = None
         try:
             if status is not None:
                 sent = await self.inline.bot.edit_rich_message(
-                    html=html, chat_id=chat_id, message_id=status.id
+                    markdown=body, chat_id=chat_id, message_id=status.id
                 )
             else:
                 sent = await self.inline.bot.send_rich_message(
-                    chat_id, html=html, message_thread_id=topic_id
+                    chat_id, markdown=body, message_thread_id=topic_id
                 )
         except Exception:
             pass
@@ -541,11 +509,7 @@ class AzuAIMod(loader.Module):
                 pass
 
         # Inline bot can't post here (e.g. not a member) — fall back to the userbot
-        plain = _basic_html(html)
-        if len(plain) > 4000:
-            # Truncating HTML can split a tag and make Telegram reject the message
-            plain = re.sub(r"<[^>]+>", "", plain)[:4000].replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
-        await utils.answer(message, plain)
+        await utils.answer(message, body[:4000], parse_mode=None)
 
     async def chatcmd(self, message):
         """.chat — включить/выключить режим контекста"""
