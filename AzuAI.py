@@ -21,6 +21,7 @@ MAX_BUTTONS_PER_PAGE = 90
 REQUEST_TIMEOUT = 120
 SEARCH_TIMEOUT = 45
 FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search"
+EXCERPT_CHARS = 6000
 
 _OBVIOUSLY_TEXT_ONLY = (
     "qwq", "whisper",
@@ -51,9 +52,7 @@ def _firecrawl_search(query: str, api_key: str) -> list[dict]:
     with urllib.request.urlopen(request, timeout=SEARCH_TIMEOUT) as response:
         data = json.loads(response.read().decode())
 
-    results = data.get("data") or []
-    if isinstance(results, dict):  # v2 shape: {"data": {"web": [...]}}
-        results = results.get("web") or []
+    results = (data.get("data") or {}).get("web") or []
     return results if isinstance(results, list) else []
 
 
@@ -255,7 +254,7 @@ class AzuAIMod(loader.Module):
             title = item.get("title") or ""
             url = item.get("url") or ""
             text = item.get("markdown") or item.get("description") or ""
-            parts.append(f"**{title}**\n{url}\n{text[:1500]}")
+            parts.append(f"**{title}**\n{url}\n{text[:EXCERPT_CHARS]}")
         return "\n\n---\n\n".join(parts) if parts else "Результатов не найдено"
 
     async def _check_vision(self, client: AsyncOpenAI, model: str) -> bool:
