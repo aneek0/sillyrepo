@@ -506,10 +506,21 @@ class AzuAIMod(loader.Module):
         quoted = "\n".join(f"> {line}" if line else ">" for line in question.splitlines())
         parts = []
         if vision_skipped:
-            parts.append("**⚠️ фото не отправлено — модель не поддерживает vision**")
-        parts.append(quoted)
-        parts.append(f"---\n\n**〔{model}〕**\n\n{answer}")
+            parts.append("<p><b>⚠️ фото не отправлено — модель не поддерживает vision</b></p>")
+        quoted_html = self._to_rich_html(quoted)
+        parts.append(quoted_html)
         return "\n\n".join(parts)
+
+    @staticmethod
+    def _to_rich_html(markdown_text: str) -> str:
+        """Markdown → HTML for the rich renderer: it consumes HTML only, so a
+        markdown body would arrive as one plain paragraph."""
+        import markdown as _markdown
+
+        return _markdown.markdown(
+            markdown_text,
+            extensions=["fenced_code", "tables", "nl2br"],
+        )
 
     # ── commands ──────────────────────────────────────────────────────────────
 
@@ -556,9 +567,9 @@ class AzuAIMod(loader.Module):
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
         body = self._format_answer(args, answer, model, vision_skipped)
 
-        # Same delivery as Pinger: for own outgoing messages the framework
-        # turns the text into a native rich message (rich=True), works in PMs.
-        await utils.answer(message, body, rich=True)
+        # Inline-result rich message (via bot, like Pinger). The rich renderer
+        # consumes HTML only, hence the markdown→HTML conversion.
+        await utils.answer(message, self._to_rich_html(body), rich=True)
 
     async def chatcmd(self, message):
         """.chat — включить/выключить режим контекста"""
