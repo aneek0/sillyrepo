@@ -5,6 +5,7 @@ import base64
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 from openai import AsyncOpenAI
 
@@ -18,6 +19,8 @@ SYSTEM_PROMPT = (
 
 MAX_BUTTONS_PER_PAGE = 90
 REQUEST_TIMEOUT = 120
+SEARCH_TIMEOUT = 45
+FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search"
 
 _OBVIOUSLY_TEXT_ONLY = (
     "qwq", "whisper",
@@ -25,6 +28,33 @@ _OBVIOUSLY_TEXT_ONLY = (
 )
 
 _vision_cache: dict[str, bool] = {}
+
+
+def _firecrawl_search(query: str, api_key: str) -> list[dict]:
+    """Blocking Firecrawl /v2/search call; run it via asyncio.to_thread."""
+    payload = {
+        "query": query,
+        "limit": 5,
+        "sources": ["web"],
+        "scrapeOptions": {"formats": [{"type": "markdown"}]},
+    }
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    request = urllib.request.Request(
+        FIRECRAWL_SEARCH_URL,
+        data=json.dumps(payload).encode(),
+        headers=headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=SEARCH_TIMEOUT) as response:
+        data = json.loads(response.read().decode())
+
+    results = data.get("data") or []
+    if isinstance(results, dict):  # v2 shape: {"data": {"web": [...]}}
+        results = results.get("web") or []
+    return results if isinstance(results, list) else []
 
 
 def _topic_id(message) -> int | None:
@@ -85,7 +115,6 @@ class AzuAIMod(loader.Module):
         "name": "AzuAI",
         "no_api_key": "⚠️ Укажи API-ключ в настройках (.config AzuAI AI_API_KEY)",
         "no_api_url": "⚠️ Укажи API-эндпоинт в настройках (.config AzuAI AI_API_URL)",
-        "no_exa_key": "⚠️ Укажи EXA API-ключ в настройках (.config AzuAI EXA_API_KEY)",
         "no_question": "⚠️ Введи вопрос после команды .ask",
         "thinking": "⏳",
         "no_model": "⚠️ Выбери модель через .aicfg",
@@ -120,9 +149,9 @@ class AzuAIMod(loader.Module):
                 lambda: "Выбранная модель (сохраняется после выбора через .aicfg)",
             ),
             loader.ConfigValue(
-                "EXA_API_KEY",
+                "FIRECRAWL_API_KEY",
                 "",
-                lambda: "API-ключ для exa-py (веб-поиск)",
+                lambda: "API-ключ Firecrawl для веб-поиска (не обязателен: без ключа — keyless с лимитами)",
             ),
         )
 
@@ -211,22 +240,23 @@ class AzuAIMod(loader.Module):
         return buttons, page, total
 
     async def _web_search(self, query: str) -> str:
-        exa_key = self.config["EXA_API_KEY"]
-        if not exa_key:
-            return "⚠️ EXA_API_KEY не задан"
         try:
-            from exa_py import AsyncExa
-            exa = AsyncExa(exa_key)
-            results = await exa.search_and_contents(query, num_results=5, text=True)
-            parts = []
-            for r in results.results:
-                title = getattr(r, "title", "") or ""
-                url = getattr(r, "url", "") or ""
-                text = getattr(r, "text", "") or ""
-                parts.append(f"**{title}**\n{url}\n{text[:500]}")
-            return "\n\n---\n\n".join(parts) if parts else "Результатов не найдено"
+            results = await asyncio.to_thread(
+                _firecrawl_search, query, self.config["FIRECRAWL_API_KEY"]
+            )
+        except urllib.error.HTTPError as e:
+            detail = e.read().decode(errors="replace")[:300] or str(e.reason)
+            return f"⚠️ Ошибка поиска (HTTP {e.code}): {detail}"
         except Exception as e:
             return f"⚠️ Ошибка поиска: {e}"
+
+        parts = []
+        for item in results:
+            title = item.get("title") or ""
+            url = item.get("url") or ""
+            text = item.get("markdown") or item.get("description") or ""
+            parts.append(f"**{title}**\n{url}\n{text[:1500]}")
+        return "\n\n---\n\n".join(parts) if parts else "Результатов не найдено"
 
     async def _check_vision(self, client: AsyncOpenAI, model: str) -> bool:
         """Probe whether model accepts image_url content. Result is cached."""
