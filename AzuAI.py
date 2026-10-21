@@ -554,14 +554,17 @@ class AzuAIMod(loader.Module):
         chat_id = utils.get_chat_id(message)
         topic_id = _topic_id(message)
 
-        # Progress message is posted by the inline bot, so the answer can be rich
+        # Progress message is posted by the inline bot, so the answer can be
+        # rich. In a chat where the inline bot has never started (a fresh PM
+        # with a contact) SendMessage as that bot raises, so fall back to a
+        # userbot reply right away instead of silently producing nothing.
         status = None
         try:
             status = await self.inline.bot.send_message(
                 chat_id, self.strings["thinking"], message_thread_id=topic_id
             )
         except Exception:
-            logger.debug("Inline bot could not post the progress message", exc_info=True)
+            logger.warning("Inline bot cannot post to %s; answering as userbot", chat_id, exc_info=True)
 
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
         body = self._format_answer(args, answer, model, vision_skipped)
@@ -577,7 +580,10 @@ class AzuAIMod(loader.Module):
                     chat_id, markdown=body, message_thread_id=topic_id
                 )
         except Exception:
-            logger.debug("Rich answer delivery failed, falling back to the userbot", exc_info=True)
+            # edit_rich_message / send_rich_message raise for PMs where the
+            # inline bot never started a message; the userbot fallback below
+            # is the only delivery channel there.
+            logger.warning("Rich delivery to %s failed; answering as userbot", chat_id, exc_info=True)
 
         if sent is not None:
             return
