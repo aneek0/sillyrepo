@@ -12,12 +12,15 @@ from .. import loader, utils
 from ..inline.types import InlineCall
 
 SYSTEM_PROMPT = (
-    "Format all output in Telegram HTML: "
+    "Format all output as Telegram rich HTML: "
     "<b>bold</b>, <i>italic</i>, <u>underline</u>, <s>strikethrough</s>, "
     "<code>inline code</code>, <pre>code block</pre>, <a href='URL'>text</a>. "
-    "Do NOT use Markdown syntax (no **, no __, no backtick blocks with ```). "
-    "Tables are forbidden — use lists or code blocks instead. "
-    "Use the web search tool when it would improve the answer."
+    "Structure long answers with rich blocks where useful: "
+    "<h1>-<h6> headings, <ul>/<ol> lists, <blockquote>, "
+    "<table><tr><th>..</th></tr><tr><td>..</td></tr></table>, "
+    "<details><summary>title</summary>body</details>, <hr/>, <tg-math>x^2</tg-math>. "
+    "Do NOT use Markdown syntax (no **, no __, no ``` fences) and never wrap the whole answer "
+    "in a code block. Use the web search tool when it would improve the answer."
 )
 
 MAX_BUTTONS_PER_PAGE = 90
@@ -31,8 +34,38 @@ _OBVIOUSLY_TEXT_ONLY = (
 _vision_cache: dict[str, bool] = {}
 
 
-def _strip_mdv2_escapes(text: str) -> str:
-    return re.sub(r'\\([_*\[\]()~`>#+\-=|{}.!\\])', r'\1', text)
+def _escape_html(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def _strip_html_fences(text: str) -> str:
+    """Models sometimes wrap the whole answer in ```html ... ``` despite instructions."""
+    match = re.fullmatch(r"\s*```(?:html)?[ \t]*\n(.*?)\n?```\s*", text, re.DOTALL)
+    return match.group(1) if match else text
+
+
+_BASIC_TAG_MAP = {
+    "h1": "b", "h2": "b", "h3": "b", "h4": "b", "h5": "b", "h6": "b",
+    "summary": "b", "details": "b", "tg-reference": "i", "tg-math": "code",
+    "tg-math-block": "pre", "tg-time": "code",
+}
+
+
+def _basic_html(html: str) -> str:
+    """Downgrade rich HTML to the tags plain parse_mode='HTML' accepts."""
+    html = re.sub(r"<hr\s*/?>", "", html)
+    html = re.sub(r"<br\s*/?>", "\n", html)
+    html = re.sub(r"<img\b[^>]*>", "", html)
+    html = re.sub(r"<table[^>]*>|</table>|</?thead>|</?tbody>|<caption[^>]*>|</caption>", "", html)
+    html = re.sub(r"<tr[^>]*>", "", html)
+    html = re.sub(r"</tr>", "\n", html)
+    html = re.sub(r"<t[hd][^>]*>", " | ", html)
+    html = re.sub(r"</t[hd]>", "", html)
+    html = re.sub(r"(?m)^ *\| ", "", html)
+    for tag, basic in _BASIC_TAG_MAP.items():
+        html = re.sub(rf"<{tag}(?:\s[^>]*)?>", f"<{basic}>", html)
+        html = re.sub(rf"</{tag}>", f"</{basic}>", html)
+    return re.sub(r"\n{3,}", "\n\n", html).strip()
 
 
 def _get_context_dir() -> str:
@@ -403,6 +436,25 @@ class AzuAIMod(loader.Module):
         except Exception as e:
             return f"⚠️ {e}", False
 
+
+    def _format_answer(self, question: str, answer: str, model: str, vision_skipped: bool) -> str:
+        """Question on top, rich answer below."""
+        question = question.strip()
+        if len(question) > 1000:
+            question = question[:1000] + "…"
+
+        answer = _strip_html_fences(answer).strip() or "⚠️ Пустой ответ"
+        if len(answer) > 30000:
+            answer = answer[:30000] + "\n\n<i>…ответ обрезан</i>"
+
+        parts = []
+        if vision_skipped:
+            parts.append("<b>⚠️ фото не отправлено — модель не поддерживает vision</b>")
+        quoted = _escape_html(question).replace("\n", "<br>")
+        parts.append(f"<blockquote>❓ {quoted}</blockquote>")
+        parts.append(f"<hr/>\n<b>〔{_escape_html(model)}〕</b>\n\n{answer}")
+        return "\n\n".join(parts)
+
     # ── commands ──────────────────────────────────────────────────────────────
 
     async def askcmd(self, message):
@@ -424,8 +476,6 @@ class AzuAIMod(loader.Module):
         # requires a string, so coerce before use
         model = str(model)
 
-        await utils.answer(message, self.strings["thinking"])
-
         reply_content, is_photo = await self._get_reply_content(message)
         vision_b64 = None
 
@@ -446,15 +496,43 @@ class AzuAIMod(loader.Module):
             return
 
         chat_id = utils.get_chat_id(message)
+
+        # Progress message is posted by the inline bot, so the answer can be rich
+        status = None
+        try:
+            status = await self.inline.bot.send_message(chat_id, self.strings["thinking"])
+        except Exception:
+            pass
+
         answer, vision_skipped = await self._call_ai(args, model, chat_id, vision_b64)
-        answer = _strip_mdv2_escapes(answer)
+        html = self._format_answer(args, answer, model, vision_skipped)
 
-        prefix = ""
-        if vision_skipped:
-            prefix = "⚠️ фото не отправлено — модель не поддерживает vision\n"
+        sent = None
+        try:
+            if status is not None:
+                sent = await self.inline.bot.edit_rich_message(
+                    html=html, chat_id=chat_id, message_id=status.id
+                )
+            else:
+                sent = await self.inline.bot.send_rich_message(chat_id, html=html)
+        except Exception:
+            pass
 
-        result = f"{prefix}<b>〔{model}〕:</b>\n{answer}"
-        await utils.answer(message, result)
+        if sent is not None:
+            return
+
+        if status is not None:
+            try:
+                await status.delete()
+            except Exception:
+                pass
+
+        # Inline bot can't post here (e.g. not a member) — fall back to the userbot
+        plain = _basic_html(html)
+        if len(plain) > 4000:
+            # Truncating HTML can split a tag and make Telegram reject the message
+            plain = re.sub(r"<[^>]+>", "", plain)[:4000].replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
+        await utils.answer(message, plain)
 
     async def chatcmd(self, message):
         """.chat — включить/выключить режим контекста"""
