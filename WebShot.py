@@ -17,7 +17,7 @@ class WebshotMod(loader.Module):
 
     strings = {
         "name": "Webshot",
-        "no_url": "<emoji document_id=5210952531676504517>❌</emoji> Укажи ссылку! Пример: <code>.webshot example.com</code> или в ответ на сообщение с ссылкой",
+        "no_url": "<emoji document_id=5210952531676504517>❌</emoji> Укажи ссылку! Пример: <code>.ws example.com</code> или в ответ на сообщение с ссылкой",
         "api_error": "<emoji document_id=5210952531676504517>❌</emoji> Ошибка ScreenshotAPI: <code>{}</code>",
         "request_error": "<emoji document_id=5210952531676504517>❌</emoji> Ошибка запроса: <code>{}</code>",
     }
@@ -31,7 +31,7 @@ class WebshotMod(loader.Module):
             ),
         )
 
-    async def webshotcmd(self, message: Message):
+    async def wscmd(self, message: Message):
         """Скриншот сайта. Флаги: -f вся страница, -dark тёмная тема, -w <px> ширина, -h <px> высота, -t <png|jpeg|webp> формат, -d <ms> задержка"""
         url = utils.get_args_raw(message)
         if not url and message.reply_to_msg_id:
@@ -99,6 +99,7 @@ class WebshotMod(loader.Module):
             file=f,
             caption=caption,
             force_document=ftype == "pdf",
+            reply_to=utils.get_topic(message),
         )
 
     def _flag_value(self, args: list, flag: str):
